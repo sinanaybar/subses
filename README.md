@@ -92,7 +92,17 @@ subses -u '01-10-1.000 10-20-1.500 20-35-2.000 35-50-2.500 50-65-3.000 65-80-4.0
 
 ![](4.png)
 
+
+------------------------------------------------------------
+
+Place these files in this path.
+
+$HOME/.config/subses/dil.log
+$HOME/.config/subses/subses.png
+
+
 Link containing video examples of how to use it.
 
 https://www.youtube.com/watch?v=MJqDyuQW59E
+
 
