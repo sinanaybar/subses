@@ -4,9 +4,9 @@
 ## Altyazı karekter sayısı ile zaman aralığı uygun olmalıdır, yoksa sesler kesilecektir.
 ## Gerekli şartlar karşılandığında Manjaro xfce4 da sorunsuz çalışmaktadır.
 ## Diğer dağıtımlarda deneme yapmadığım için düzenleme yapmak gerekli olabilir.
-## https://github.com/sinanaybar
+## https://github.com/sinanaybar/subses?tab=readme-ov-file#readme
 ## sinanaybar@yandex.com
-## https://www.youtube.com/@sinanaybar4459
+## https://www.youtube.com/watch?v=MJqDyuQW59E&t=931s
 ## YÜKLÜ OLDUĞUNDAN EMİN OLUN: Yardımcı uygulamarın kurulu değilse kurun.
 ## ffmpeg _ mpv _ yad _ xclip _ sox _ xterm _ xev _ tesseract
 
@@ -28,23 +28,23 @@ m_r='\e[1;35m'
 r_X="\e[0m"
 
 # Gerekli yardımcı uyg kontrol işlemi.
-which subses >/dev/null || {
-yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-    --window-icon="$HOME/.config/subses/subses.png" \
-    --height=100 --width=300 \
-    --text="Subses uyg çalıştırılabilir konumda değil... (\$PATH)";
-}
-test -e "$HOME/.config/subses/subses.png" || {
+test -f "$HOME/.config/subses/subses.png" || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
      --window-icon="$HOME/.config/subses/subses.png" \
      --height=100 --width=300 \
      --text="Gerekli Dosyalar konumda değil...\n$HOME/.config/subses/subses.png";
 }
-test -e "$HOME/.config/subses/dil.log" || {
+test -f "$HOME/.config/subses/dil.log" || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
      --window-icon="$HOME/.config/subses/subses.png" \
      --height=100 --width=300 \
      --text="Gerekli Dosyalar konumda değil...\n$HOME/.config/subses/dil.log";
+}
+which subses >/dev/null || {
+yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+    --window-icon="$HOME/.config/subses/subses.png" \
+    --height=100 --width=300 \
+    --text="Subses uyg çalıştırılabilir konumda değil..!";
 }
 which yt-dlp >/dev/null || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
