@@ -10,11 +10,11 @@
 ## birleştirme, ses den metne gibi işlemlerini yad arayüzü sağlanır.
 
 # Gereksinim duyulan uyg ve dosyaların varlığını yoklama
-which subses >/dev/null || {
+which mpv >/dev/null || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --window-icon="$HOME/.config/subses/subses.png" \
     --height=100 --width=300 \
-    --text="Subses uyg çalıştırılabilir konumda değil... (\$PATH)"
+    --text="MPV uyg yüklü değil...";
 }
 which yt-dlp >/dev/null || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
@@ -22,11 +22,11 @@ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --height=100 --width=300 \
     --text="YT-DLP uyg yüklü değil...";
 }
-which wget >/dev/null || {
+which xterm >/dev/null || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --window-icon="$HOME/.config/subses/subses.png" \
     --height=100 --width=300 \
-    --text="WGET uyg yüklü değil...";
+    --text="XTERM uyg yüklü değil...";
 }
 which sox >/dev/null || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
@@ -40,41 +40,29 @@ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --height=100 --width=300 \
     --text="FFMPEG uyg yüklü değil...";
 }
-which tesseract >/dev/null || {
-yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-    --window-icon="$HOME/.config/subses/subses.png" \
-    --height=100 --width=300 \
-    --text="TESSERACT uyg yüklü değil...";
-}
-which mpv >/dev/null || {
-yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-    --window-icon="$HOME/.config/subses/subses.png" \
-    --height=100 --width=300 \
-    --text="MPV uyg yüklü değil...";
-}
-which xterm >/dev/null || {
-yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-    --window-icon="$HOME/.config/subses/subses.png" \
-    --height=100 --width=300 \
-    --text="XTERM uyg yüklü değil...";
-}
 which xev >/dev/null || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --window-icon="$HOME/.config/subses/subses.png" \
     --height=100 --width=300 \
     --text="XEV uyg yüklü değil...";
 }
-test -e "$HOME/.config/subses/subses.png" || {
+which wget >/dev/null || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-     --window-icon="$HOME/.config/subses/subses.png" \
-     --height=100 --width=300 \
-     --text="Gerekli Dosyalar konumda değil...\n$HOME/.config/subses/subses.png";
+    --window-icon="$HOME/.config/subses/subses.png" \
+    --height=100 --width=300 \
+    --text="WGET uyg yüklü değil...";
 }
-test -e "$HOME/.config/subses/dil.log" || {
+test -f "$HOME/.config/subses/subses.png" || {
 yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
      --window-icon="$HOME/.config/subses/subses.png" \
      --height=100 --width=300 \
-     --text="Gerekli Dosyalar konumda değil...\n$HOME/.config/subses/dil.log";
+     --text="Gerekli Dosyalar Konumda Değil..!\n$HOME/.config/subses/subses.png";
+}
+test -f "$HOME/.config/subses/dil.log" || {
+yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+     --window-icon="$HOME/.config/subses/subses.png" \
+     --height=100 --width=300 \
+     --text="Gerekli Dosyalar Konumda Değil..!\n$HOME/.config/subses/dil.log";
 }
 
 # Dublajlı olarak seslendirme işlem.
@@ -168,7 +156,6 @@ function dublaj() {
   notify-send --icon="$HOME/.config/subses/subses.png" "Altyazı ve Ayarlar Seçilemedi..!"
  fi
 }
-
 # İndirme işlemi yapılacak olan kod blok. ( yt-dlp,wget )
 function indir() {
 # Yad menu yt-dlp veya wget ile indirme ayar seçimi.
@@ -371,7 +358,6 @@ rm '/tmp/ses/wget.log' 2>/dev/null
 ;;
 esac
 }
-
 # Mpv çıktısı yönlendilir. Hatalı çıktısı yazdırılır.
 function oynat() {
 [[ "$2" =~ FALSE ]] && url="$1" || url="$3"
@@ -384,7 +370,6 @@ else
 fi
 killall xterm 2>/dev/null
 }
-
 # yt-dlp ile video ve altyazı hakkında bilgi alınır.
 function bilgi() {
 case $1 in
@@ -400,7 +385,6 @@ yad --text-info --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
 ;;
 esac
 }
-
 # Video Ses birleştirme
 function birles() {
 # Mevcut Video ve ses dosyasını secim.
@@ -430,7 +414,6 @@ until ! ps "$ff" >/dev/null; do sleep 1 ; done 2>/dev/null
 kill -9 `ps aux|awk '$12 ~ /--no-buttons/{printf "%s ",$2}'` 2>/dev/null
 rm '/tmp/ses/ff.log' 2>/dev/null
 }
-
 # Mikrofon dinlenerek yazdırma işlemi
 function mik() {
   # Mikrofon dineleme ve metne dönüştürülür.
@@ -489,7 +472,6 @@ function mik() {
   exec 9>&-
   rm -rf '/tmp/ses/X.pipe' '/tmp/ses/PX' 2>/dev/null
 }
-
 # Tuş konbinasyon işlemi
 function tus() {
   # xdotool uyg kullanımı için basit bir arayüz...
@@ -561,7 +543,6 @@ function tus() {
        fi
       done >/dev/null &
 }
-
 # Uyg için çalışan foksiyonlar
 export -f dublaj
 export -f bilgi
@@ -570,7 +551,6 @@ export -f oynat
 export -f birles
 export -f mik
 export -f tus
-
 # Pano içeriği kontrol edilir link ise aktarılır. Uyg için basit bir arayüz sağlanır.
 _url="`xclip -o -rmlastnl -selection clipboard|awk '/^http/'`"
 yad --form --title="⟆υᑲ⟆∈⟆  v1.6" --height=200 --width=400 \
