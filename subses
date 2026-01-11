@@ -699,7 +699,7 @@ if [[ "$1" =~ ^- ]]; then
    sleep `tr -d - <<<"$2"` ## İstenilen bekleme süresi
 
   # Satır boyutu sınırlandırılır ve satır satır okunur.
-   tr '.|?|!' '\n' <<<"${5:-$(xclip -o)}"|awk NF|while read -r oku; do
+   tr '.|?|!|:|;|,' '\n' <<<"${5:-$(xclip -o)}"|awk NF|while read -r oku; do
     YZ="$(sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//' <<<"$oku")"
     wget -U "Mozilla/5.0" -q -O- \
     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$3&dt=t&q=${YZ,,}"\
@@ -720,7 +720,7 @@ if [[ "$1" =~ ^- ]]; then
        --image="$HOME/.config/subses/subses.png"\
        --command="rm /tmp/ses/AT" & _yad="$!"
 
-   tr '.|?|!' '\n' <<<"${4:-$(xclip -o)}"|awk NF|while read -r oku; do
+   tr '.|?|!|:|;|,' '\n' <<<"${4:-$(xclip -o)}"|awk NF|while read -r oku; do
     YZ="$(sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//' <<<"$oku")"
     wget -U "Mozilla/5.0" -q -O- \
     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$2&dt=t&q=${YZ,,}"\
@@ -739,7 +739,7 @@ if [[ "$1" =~ ^- ]]; then
   -t)
   # 3.cü değer kontrol edilir, mevcut ise alınır yoksa panodan aktarılır.
   if [[ "$3" == "X" ]]; then
-   _DEPO+="$(fmt -sw 150 <<<"$(xclip -o)"|while read -r oku; do
+   _DEPO+="$(tr '.|?|!|:|;|,' '\n' <<<"$(xclip -o)"|while read -r oku; do
    wget -U "Mozilla/5.0" -q -O- \
    "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${oku}"\
    |awk -F'"' '{print $2}'; done
@@ -748,14 +748,14 @@ if [[ "$1" =~ ^- ]]; then
    ||notify-send --icon="$HOME/.config/subses/subses.png" "HATALI İŞLEM SONU..."
   elif [[ -z "$3" ]]; then
    # Borulama ile alınan metinler
-   awk NF|while read -r oku; do
+   awk NF|tr '.|?|!|:|;|,' '\n'|while read -r oku; do
     wget -U "Mozilla/5.0" -q -O- \
     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${oku}"\
     |awk -F'"' '{print $2}'
    done
   elif [[ -n "$3" ]]; then
    # Direk girilen metinler.
-   fmt -sw 150 <<<"$3"|tr '.' '\n'|while read -r OKU; do
+   tr '.|?|!|:|;|,' '\n' <<<"$3"|tr '.' '\n'|while read -r OKU; do
     wget -U "Mozilla/5.0" -q -O- \
     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${OKU}"\
     |awk -F'"' '{print $2}'
