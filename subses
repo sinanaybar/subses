@@ -4,9 +4,9 @@
 ## Altyazı karekter sayısı ile zaman aralığı uygun olmalıdır, yoksa sesler kesilecektir.
 ## Gerekli şartlar karşılandığında Manjaro xfce4 da sorunsuz çalışmaktadır.
 ## Diğer dağıtımlarda deneme yapmadığım için düzenleme yapmak gerekli olabilir.
-## https://github.com/sinanaybar/subses?tab=readme-ov-file#readme
+## https://github.com/sinanaybar/subses
 ## sinanaybar@yandex.com
-## https://www.youtube.com/watch?v=MJqDyuQW59E&t=931s
+## https://www.youtube.com/watch?v=MJqDyuQW59E
 ## YÜKLÜ OLDUĞUNDAN EMİN OLUN: Yardımcı uygulamarın kurulu değilse kurun.
 ## ffmpeg _ mpv _ yad _ xclip _ sox _ xterm _ xev _ tesseract
 
@@ -846,21 +846,17 @@ if [[ "$1" =~ ^- ]]; then
   # Ekran görüntüsü alınarak tesseract ile işlem yapılır. Resim boyutu x2 ve negatif ayarlanır.
   ( import png:-; sleep 0.1; ) >'/tmp/ses/OCR.png' && { \
   magick /tmp/ses/OCR.png -resize 200% -channel RGB -negate /tmp/ses/OCR.png ;
-  tesseract '/tmp/ses/OCR.png' - -l "${OCR[0]}" >'/tmp/OCR.log' \
+  tesseract '/tmp/ses/OCR.png' - -l "${OCR[0]}"|tr '\n' ' ' >'/tmp/ses/OCR' \
   || notify-send --icon="$HOME/.config/subses/subses.png" "HATALI SONUÇ"
-  if test -n '/tmp/OCR.log'; then
+  if test -n '/tmp/ses/OCR'; then
    case $2 in
     -y | --yaz)
-    while read -r oku; do
      notify-send --icon="$HOME/.config/subses/subses.png" "$(wget -U "Mozilla/5.0" -q -O- \
-     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=${oku}"\
-     |awk -F'"' '{print $2}')"
-    done <'/tmp/OCR.log'
+     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(</tmp/ses/OCR)"|awk -F'"' '{print $2}'|fmt -sw 75)"
     ;;
     -o | --oku)
     ses="$(wget -U "Mozilla/5.0" -q -O- \
-    "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(tr "\n" " " <'/tmp/OCR.log')"\
-    |awk -F'"' '{print $2}')"
+    "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(</tmp/ses/OCR)"|awk -F'"' '{print $2}')"
     mpv --no-terminal --speed="${OCR[2]:-1.0}" --af=rubberband \
     "https://translate.google.com/translate_tts?ie=UTF-8&tl=${OCR[1]}&client=tw-ob&q=${ses,,}"
     ;;
