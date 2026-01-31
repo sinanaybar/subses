@@ -679,6 +679,6 @@ yad --form --title="⟆υᑲ⟆∈⟆  v1.6" --height=200 --width=400 \
     --field='<b><big><big>İNDİRME MENU</big></big></b>!gtk-yes!popup':FBTN          'bash -c "indir %1"' \
     --field='<b><big><big>TUŞ Konbinasyon </big></big></b>!gtk-yes!popup':FBTN      'bash -c "tus"' \
     --field='<b><big><big>Mikrofon Dinle Yazdır</big></big></b>!gtk-yes!popup':FBTN 'bash -c "mik"' \
-    --field='<b><big><big>Video+Ses Böl</big></big></b>!gtk-yes!popup':FBTN         'bash -c "bol"' \
+    --field='<b><big><big>Video+Sub Böl</big></big></b>!gtk-yes!popup':FBTN         'bash -c "bol"' \
     --field='<b><big><big>Video+Ses Birleştir</big></big></b>!gtk-yes!popup':FBTN   'bash -c "birles"' \
     --button=ÇIKIŞ:0 >/dev/null
