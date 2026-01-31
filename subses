@@ -104,6 +104,7 @@ find '/tmp/ses' -type f \( \
     -o -iname "*.txt" \
     -o -iname "*.log" \) -exec rm -rf {} \;
 }
+
 [[ ! -d "/tmp/ses/ff" ]] && mkdir -p "/tmp/ses/ff"
 
 # Ses dosya oluşturma yapıldığı için, çoklu çalışmalar da çakışmaya neden olabilir.
@@ -405,9 +406,9 @@ if [[ "$1" =~ ^- ]]; then
     _oku=( $oku )
     MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${sub[0]}"|tr [:space:] ' '`"
     printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/sub.log'
-    echo -en "\rLog: `du <'/tmp/ses/sub.log'`"
+    echo -e "`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`"
     if ps "$XM" &>/dev/null; then
-     echo -e "Log:  `du <'/tmp/ses/sub.log'`" >'/tmp/ses/xterm.log'
+     echo "`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`" >'/tmp/ses/xterm.log'
     fi
    done
    echo -ne "\r\n"
@@ -568,126 +569,6 @@ if [[ "$1" =~ ^- ]]; then
    echo -e "\n${k_i}${y_K}İŞLEM HATASI...! ${y_X}${r_X}"
    rm '/tmp/ses/sub.txt' 2>/dev/null
   fi
-  ;;
-  -b)
-  # Video & Altyazı eş zamanlı olarak bölme işlemi.
-  ZAMAN() {
-  _sub=( "$2" "$1" )
-  # Altyazı zamanlama yapılacak kod döngü blok
-  i=0
-  D=01234567
-  bb="$(grep -c '[0-9][0-9]:[0-9]' "${_sub[0]}")"
-  while read -r oku; do
-   if [[ "$oku" =~ ([0-9][0-9]:) ]]; then
-     read -ra II< <(awk -F':|,|-->' -v x="${_sub[1]}" '{
-     a = $1*60*60+$2*60+$3"."$4;
-     b = $5*60*60+$6*60+$7"."$8;
-     printf("%.3f ", a-x);
-     printf("%.3f", b-x);
-     }' <<<"$oku")
-     X="`printf "%02d:%02d:%02d" "$((${II[0]/.*/}/3600))" "$((${II[0]/.*/}%3600/60))" "$((${II[0]/.*/}%60))"`"
-     S="`printf "%02d:%02d:%02d" "$((${II[1]/.*/}/3600))" "$((${II[1]/.*/}%3600/60))" "$((${II[1]/.*/}%60))"`"
-     echo "$X,${II[0]/*./} --> $S,${II[1]/*./}" >>'/tmp/ses/sub.txt'
-   else
-    echo "$oku" >>'/tmp/ses/sub.txt'
-   fi
-   aa=$(grep -c '[0-9][0-9]:' '/tmp/ses/sub.txt')
-   Y=$(("${aa}*100/${bb}*100"/100))
-   B=$(("${Y}*5"/10))
-   K=$((50-B))
-   T=$(perl -E 'say "┃"x'"$B")
-   E=$(perl -E 'say "╺"x'"$K")
-   # shellcheck disable=SC2027
-   j="\e[1;3"${D:i++%${#D}:1}"m"
-   echo -ne "\r${y_K}`du -h '/tmp/ses/sub.txt'|cut -f1`${y_X}${j}\
-   ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
-   if pidof xterm >/dev/null; then
-    echo -e "╏${T}${E}╏${Y}%" >'/tmp/ses/xterm.log'
-   fi
-  done <"${_sub[0]}"
-  }
-  cop() {
-  find '/tmp/ses' -type f \( -iname "*.txt" -o -iname "*.log" \) -exec rm -rf {} \;
-  rm "${yol}.${sub[1]}.txt" 2>/dev/null
-  }
-  trap cop EXIT
-  # Gerekli dosya varlık kontrol edilir yoksa yad ile istenir.
-  if [[ -n $4 ]]; then
-   g2="`pwd`/$2"
-   g3="`pwd`/$3"
-   sub=( "`dirname "$g2"`/`basename "$g2"`" "`dirname "$g3"`/`basename "$g3"`" "$4" )
-  else
-   read -r sub< <(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-    --form --item-separator='!' --separator='_' \
-    --window-icon="$HOME/.config/subses/subses.png" \
-    --field="Video Seç":FL             "/*.mp4" \
-    --field="Altyazı Seç":FL           "/*.srt" \
-    --field="Buraya kadar kes: "       '00:00:00') || exit 2
-   sub=( "`cut -d_ -f1 <<<"$sub"`" "`cut -d_ -f2 <<<"$sub"`" "`cut -d_ -f3 <<<"$sub"`" )
-   xterm -geometry 80x10-10+300 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
-  fi
-
-  read -r bak< <(awk -F':' '{print $1*60*60+$2*60+$3}' <<<"${sub[2]}")
-  read -r son< <(ffprobe "${sub[0]}" 2>&1 | awk '/Duration:/{print $2}')
-  echo -ne "\r\n"
-  # Verilen zamana göre video bölünür.
-  ffmpeg -nostdin -loglevel quiet \
-  -i "${sub[0]}" -ss "00:00:00" -to "${sub[2]}" -acodec ac3 -vcodec copy "${sub[0]/.*/}.CD1.mp4" &
-  ff=$!
-  while ps "$ff" >/dev/null; do
-   sleep 0.5
-   echo -ne "\r`du -h "${sub[0]/.*/}.CD1.mp4" 2>/dev/null`"
-   if pidof xterm >/dev/null; then
-    echo -e "`du -h "${sub[0]/.*/}.CD1.mp4" 2>/dev/null`" >'/tmp/ses/xterm.log'
-   fi
-  done
-  echo -ne "\r\n"
-  ffmpeg -nostdin -loglevel quiet \
-  -i "${sub[0]}" -ss "${sub[2]}" -to "${son/.*/}" -acodec ac3 -vcodec copy "${sub[0]/.*/}.CD2.mp4" &
-  ff=$!
-  while ps "$ff" >/dev/null; do
-   sleep 0.5
-   echo -ne "\r`du -h "${sub[0]/.*/}.CD2.mp4" 2>/dev/null`"
-   if pidof xterm >/dev/null; then
-    echo -e "`du -h "${sub[0]/.*/}.CD2.mp4" 2>/dev/null`" >'/tmp/ses/xterm.log'
-   fi
-  done
-  echo
-
-  # Altyazıyı bölünecek metin dosyasına döngü blok
-  s=0
-  while read -r al; do
-   if [[ "$al" =~ ([0-9][0-9]:) ]];then
-    read -r bk< <(awk -F':|,' '{print $1*60*60+$2*60+$3}' <<<"$al")
-    if [[ ! "$bk" -ge "$bak" ]]; then
-     echo -e "\n$((++s))\n${al}" >>'/tmp/ses/CD1.txt'
-    else
-     echo -e "\n$((++s))\n${al}" >>'/tmp/ses/CD2.txt'
-    fi
-   fi
-   if [[ "$al" =~ ([A-Za-z]) ]];then
-    if [[ ! "$bk" -ge "$bak" ]]; then
-     echo -e "$al\n" >>'/tmp/ses/CD1.txt'
-    else
-     echo -e "$al\n" >>'/tmp/ses/CD2.txt'
-    fi
-   fi
-  done <"${sub[1]}"
-
-  # Bölünen altyazı metin dosyaları srt dönüştürülür.
-  ffmpeg -nostdin -loglevel quiet -i '/tmp/ses/CD1.txt' "${sub[0]/.*/}.CD1.srt"
-
-  # Bölünen srt dosyaları bölünen zamana göre yeniden zamanlanır.
-  ZAMAN "$bak" "/tmp/ses/CD2.txt" && \
-  ffmpeg -nostdin -loglevel quiet -i '/tmp/ses/sub.txt' "${sub[0]/.*/}.CD2.srt"
-  if [ $? = 0 ]; then
-   echo -e "\n${m_i}${y_K}İŞLEM TAMAMLANDI...${y_X}${r_X}"
-   rm '/tmp/ses/sub.txt' '/tmp/ses/CD1.txt' '/tmp/ses/CD2.txt' 2>/dev/null
-  else
-   echo -e "\n${k_i}${y_K}İŞLEM HATASI...! ${y_X}${r_X}"
-   rm '/tmp/ses/sub.txt' '/tmp/ses/CD1.txt' '/tmp/ses/CD2.txt' 2>/dev/null
-  fi
-  if pidof xterm >/dev/null; then killall xterm; fi
   ;;
   -k)
   if [[  "$2" =~ ^-  ]]; then
@@ -1007,18 +888,6 @@ PAREMETRELER VE ÖRNEK KULLANIM:
       subses -m tr 'selam sinan' '/home/$USER/Müzik/ses.mp3'
 
 
--b    Video ve srt birbirleriyle uyumlu olarak bölme işlemi yapılır.
-      Video ile bölünen srt de video eş zamanlı olarak bölünür.
-      Bölünen srt video zamanına uyumlu olur,
-      yeniden zamanı ayarlamaya gerek yoktur.
-
-      Yad ile ayarları girmek:
-      subses -b
-
-      Terminal aracılığıyla da işlem yapılabilir:
-      subses -b 'srt.mp4' 'srt.srt' 00:01:00
-
-
 -z    Altyazı zamanlamasını yeniden yapılandırma işlemi.
       ileri doğru 1 saniye kaydırmak için +1.000 şeklinde verilmelidir,
       geriye doğru ise -1.000, saniselik kaydırma için
@@ -1127,9 +996,9 @@ PAREMETRELER VE ÖRNEK KULLANIM:
   *)
   echo -e "${m_i}${y_K}Geçersiz Seçenek:${y_X}${r_X} ${k_i}${y_K}$1${y_X}${r_X}\n${m_i}${y_K}KULLANIN:${y_X}${r_X}subses\
   [${k_i}${y_K}-s ${y_X}${r_X}] [${k_i}${y_K}-m ${y_X}${r_X}] [${k_i}${y_K}-c ${y_X}${r_X}]\
-  [${k_i}${y_K}-z ${y_X}${r_X}] [${k_i}${y_K}-b ${y_X}${r_X}] [${k_i}${y_K}-k ${y_X}${r_X}]\
+  [${k_i}${y_K}-z ${y_X}${r_X}] [${k_i}${y_K}-v ${y_X}${r_X}] [${k_i}${y_K}-k ${y_X}${r_X}]\
   [${k_i}${y_K}-u ${y_X}${r_X}] [${k_i}${y_K}-i ${y_X}${r_X}] [${k_i}${y_K}-t ${y_X}${r_X}]\
-  [${k_i}${y_K}-v ${y_X}${r_X}] [${k_i}${y_K}-y ${y_X}${r_X}] [${k_i}${y_K}-l ${y_X}${r_X}]"|sed -e 's/\s\{1,\}/ /g'
+  [${k_i}${y_K}-y ${y_X}${r_X}] [${k_i}${y_K}-l ${y_X}${r_X}]" | sed -e 's/\s\{1,\}/ /g'
   exit 2
   ;;
   esac
