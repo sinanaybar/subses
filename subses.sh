@@ -385,6 +385,117 @@ yad --text-info --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
 ;;
 esac
 }
+# Video-Sub eşli bölme işlemi
+function bol() {
+  # Video & Altyazı eş zamanlı olarak bölme işlemi.
+  ZAMAN() {
+  _sub=( "$2" "$1" )
+  # Altyazı zamanlama yapılacak kod döngü blok
+  i=0
+  D=01234567
+  bb="$(grep -c '[0-9][0-9]:[0-9][0-9]:' "${_sub[0]}")"
+  while read -r oku; do
+   pidof xterm || break
+   if [[ "$oku" =~ ([0-9][0-9]:) ]]; then
+     read -ra II< <(awk -F':|,|-->' -v x="${_sub[1]}" '{
+     a = $1*60*60+$2*60+$3"."$4;
+     b = $5*60*60+$6*60+$7"."$8;
+     printf("%.3f ", a-x);
+     printf("%.3f", b-x);
+     }' <<<"$oku")
+     X="`printf "%02d:%02d:%02d" "$((${II[0]/.*/}/3600))" "$((${II[0]/.*/}%3600/60))" "$((${II[0]/.*/}%60))"`"
+     S="`printf "%02d:%02d:%02d" "$((${II[1]/.*/}/3600))" "$((${II[1]/.*/}%3600/60))" "$((${II[1]/.*/}%60))"`"
+     echo "$X,${II[0]/*./} --> $S,${II[1]/*./}" >>'/tmp/ses/sub.txt'
+   else
+    echo "$oku" >>'/tmp/ses/sub.txt'
+   fi
+   aa=$(grep -c '[0-9][0-9]:[0-9][0-9]:' '/tmp/ses/sub.txt')
+   Y=$(("${aa}*100/${bb}*100"/100))
+   B=$(("${Y}*5"/10))
+   K=$((50-B))
+   T=$(perl -E 'say "┃"x'"$B")
+   E=$(perl -E 'say "╺"x'"$K")
+   pidof xterm && echo -e "`head -n2 '/tmp/ses/xterm.log'`\n╏${T}${E}╏${Y}%" >'/tmp/ses/xterm.log'
+  done <"${_sub[0]}"
+  }
+  cop() {
+  find '/tmp/ses' -type f \( -iname "*.txt" -o -iname "*.log" \) -exec rm -rf {} \;
+  killall ffmpeg 2>/dev/null
+  rm "${yol}.${sub[1]}.txt" 2>/dev/null
+  exit 0
+  }
+  trap cop EXIT
+  # Gerekli dosya varlık kontrol edilir yoksa yad ile istenir.
+   read -r sub< <(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+    --form --item-separator='!' --separator='_' \
+    --window-icon="$HOME/.config/subses/subses.png" \
+    --field="Video Seç":FL             "/*.mp4" \
+    --field="Altyazı Seç":FL           "/*.srt" \
+    --field="Buraya kadar kes: "       '00:00:00') || exit 2
+   sub=( "`cut -d_ -f1 <<<"$sub"`" "`cut -d_ -f2 <<<"$sub"`" "`cut -d_ -f3 <<<"$sub"`" )
+   xterm -geometry 80x10-10+300 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
+
+  read -r bak< <(awk -F':' '{print $1*60*60+$2*60+$3}' <<<"${sub[2]}")
+  read -r son< <(ffprobe "${sub[0]}" 2>&1 | awk '/Duration:/{print $2}')
+  echo -ne "\n"
+  # Verilen zamana göre video bölünür.
+  ffmpeg -nostdin -loglevel quiet \
+  -i "${sub[0]}" -ss "00:00:00" -to "${sub[2]}" -acodec ac3 -vcodec copy "${sub[0]/.*/}.CD1.mp4" &
+  ff=$!
+  while ps "$ff" >/dev/null; do
+   sleep 0.5
+   pidof xterm && du -h "${sub[0]/.*/}.CD1.mp4" >'/tmp/ses/xterm.log'
+  done
+  ffmpeg -nostdin -loglevel quiet \
+  -i "${sub[0]}" -ss "${sub[2]}" -to "${son/.*/}" -acodec ac3 -vcodec copy "${sub[0]/.*/}.CD2.mp4" &
+  ff=$!
+  while ps "$ff" >/dev/null; do
+   sleep 0.5
+   pidof xterm && du -h "${sub[0]/.*/}.CD1.mp4" "${sub[0]/.*/}.CD2.mp4" >'/tmp/ses/xterm.log'
+  done
+
+  # Altyazıyı bölünecek metin dosyasına döngü blok
+  s=0
+  while read -r al; do
+   pidof xterm || break
+   if [[ "$al" =~ ([0-9][0-9]:) ]];then
+    read -r bk< <(awk -F':|,' '{print $1*60*60+$2*60+$3}' <<<"$al")
+    if [[ ! "$bk" -ge "$bak" ]]; then
+     echo -e "\n$((++s))\n${al}" >>'/tmp/ses/CD1.txt'
+     echo -e "`du -h "${sub[0]/.*/}.CD1.mp4" "${sub[0]/.*/}.CD2.mp4"`
+     \n CD-1 Bölünüyor: `du -h '/tmp/ses/CD1.txt'|cut -f1`" >'/tmp/ses/xterm.log'
+    else
+     echo -e "\n$((++s))\n${al}" >>'/tmp/ses/CD2.txt'
+     echo -e "`du -h "${sub[0]/.*/}.CD1.mp4" "${sub[0]/.*/}.CD2.mp4"`
+     \n CD-2 Bölünüyor: `du -h '/tmp/ses/CD2.txt'|cut -f1`" >'/tmp/ses/xterm.log'
+    fi
+   fi
+   if [[ "$al" =~ ([A-Za-z]) ]];then
+    if [[ ! "$bk" -ge "$bak" ]]; then
+     echo -e "$al\n" >>'/tmp/ses/CD1.txt'
+    else
+     echo -e "$al\n" >>'/tmp/ses/CD2.txt'
+    fi
+   fi
+  done <"${sub[1]}"
+
+  # Bölünen altyazı metin dosyaları srt dönüştürülür.
+  ffmpeg -nostdin -loglevel quiet -i '/tmp/ses/CD1.txt' "${sub[0]/.*/}.CD1.srt"
+
+  # Bölünen srt dosyaları bölünen zamana göre yeniden zamanlanır.
+  ZAMAN "$bak" "/tmp/ses/CD2.txt" && \
+  ffmpeg -nostdin -loglevel quiet -i '/tmp/ses/sub.txt' "${sub[0]/.*/}.CD2.srt"
+  if [ $? = 0 ]; then
+   echo -e "\nİŞLEM TAMAMLANDI..." >>'/tmp/ses/xterm.log'
+   rm '/tmp/ses/sub.txt' '/tmp/ses/CD1.txt' '/tmp/ses/CD2.txt' 2>/dev/null
+   sleep 1.5
+  else
+   echo -e "\nİŞLEM HATASI...!" >>'/tmp/ses/xterm.log'
+   rm '/tmp/ses/sub.txt' '/tmp/ses/CD1.txt' '/tmp/ses/CD2.txt' 2>/dev/null
+   sleep 1.5
+  fi
+  killall xterm 2>/dev/null
+}
 # Video Ses birleştirme
 function birles() {
 # Mevcut Video ve ses dosyasını secim.
@@ -551,6 +662,8 @@ export -f oynat
 export -f birles
 export -f mik
 export -f tus
+export -f bol
+
 # Pano içeriği kontrol edilir link ise aktarılır. Uyg için basit bir arayüz sağlanır.
 _url="`xclip -o -rmlastnl -selection clipboard|awk '/^http/'`"
 yad --form --title="⟆υᑲ⟆∈⟆  v1.6" --height=200 --width=400 \
@@ -566,5 +679,6 @@ yad --form --title="⟆υᑲ⟆∈⟆  v1.6" --height=200 --width=400 \
     --field='<b><big><big>İNDİRME MENU</big></big></b>!gtk-yes!popup':FBTN          'bash -c "indir %1"' \
     --field='<b><big><big>TUŞ Konbinasyon </big></big></b>!gtk-yes!popup':FBTN      'bash -c "tus"' \
     --field='<b><big><big>Mikrofon Dinle Yazdır</big></big></b>!gtk-yes!popup':FBTN 'bash -c "mik"' \
+    --field='<b><big><big>Video+Ses Böl</big></big></b>!gtk-yes!popup':FBTN         'bash -c "bol"' \
     --field='<b><big><big>Video+Ses Birleştir</big></big></b>!gtk-yes!popup':FBTN   'bash -c "birles"' \
     --button=ÇIKIŞ:0 >/dev/null
