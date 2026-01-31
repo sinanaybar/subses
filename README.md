@@ -28,11 +28,6 @@ Converting text to audio file
 
 `subses -m tr 'Hello boys' 'ses.mp3'`
 
--b
-
-Splitting video and subtitles synchronously
-
-`subses -b 'srt.mp4' 'srt.srt' 00:01:00`
 
 -z
 
@@ -101,6 +96,7 @@ $HOME/.config/subses/subses.png
 Link containing video examples of how to use it.
 
 https://www.youtube.com/watch?v=MJqDyuQW59E
+
 
 
 
