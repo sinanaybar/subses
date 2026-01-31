@@ -12,7 +12,7 @@ There may be a formatting problem in srt files with unidentified errors. 
 
 Performance depends on the srt quality.
 
-![](1.gif)
+![](1.png)
 
 -s  
 
@@ -101,6 +101,7 @@ $HOME/.config/subses/subses.png
 Link containing video examples of how to use it.
 
 https://www.youtube.com/watch?v=MJqDyuQW59E
+
 
 
 
