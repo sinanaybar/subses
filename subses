@@ -406,7 +406,7 @@ if [[ "$1" =~ ^- ]]; then
     _oku=( $oku )
     MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${sub[0]}"|tr [:space:] ' '`"
     printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/sub.log'
-    echo -e "`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`"
+    echo -e "\r`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`"
     if ps "$XM" &>/dev/null; then
      echo "`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`" >'/tmp/ses/xterm.log'
     fi
