@@ -137,9 +137,11 @@ if [[ "$1" =~ ^- ]]; then
    play -q -n -c1 synth sin %-12 sin %-9 sin %-5 sin %-2 fade q 0.1 1 0.1
    echo -e "Desteklenmeyen altyazı dosya...\nİşlem sonlandırılıp çıkış yapılıyor..."
    TEMiZLE 2>/dev/null
+   exit 0
   fi
 
   # Altyazı biçimlendirme düzenleme
+  read -r TAM < <(echo "`grep -c "[0-9][0-9]:[0-9][0-9]:" "$2"` 2 * n"|dc)
   paste -- \
   <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$2"|sed '$d') \
   <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$2"|sed '1d')|\
@@ -150,6 +152,7 @@ if [[ "$1" =~ ^- ]]; then
     _oku=( $oku )
     MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "$2"|tr [:space:] ' '`"
     printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/sub.log'
+    echo -ne "\r`wc -l <'/tmp/ses/sub.log'` > $TAM"
   done
   cut -d_ -f1 '/tmp/ses/sub.log'|strings|uniq|while read -r oku; do
     SN="$(awk -F: '{print $1*60*60+$2*60+$3}' <<<"$oku")"
@@ -157,10 +160,13 @@ if [[ "$1" =~ ^- ]]; then
     |sed -e 's/[[][^[]*]//g' -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//')"
     [[ "$AL" =~ ([A-Za-z]) ]] && \
     printf "%s#%s#%s\n" "${SN}" "${oku}" "${AL}" >>'/tmp/ses/srt.log'
+    read -r EK< <(wc -l <'/tmp/ses/srt.log'|awk -v x="`grep -c "[0-9][0-9]:[0-9][0-9]:" "$2"`" '{print $1+x}')
+    echo -ne "\r${EK} > ${TAM}"
   done
 
   # Elde edilen altyazı metin dosyası ile diğer girdiler dolar değerine atanır.
   VX=( "/tmp/ses/srt.log" "${3/-*/}" "${3/*-/}" "$4" )
+  echo -ne "\r\n"
   echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nViD: ${4/*\//}\nSUB: ${2/*\//}\nDiL: ${3/-*/}"
 
   i=0
@@ -300,12 +306,12 @@ if [[ "$1" =~ ^- ]]; then
   if test -d '/tmp/ses/X'; then rm /tmp/ses/X/* 2>/dev/null; else mkdir -p '/tmp/ses/X'; fi
   # Xterm çalıştırılır bilgi vermek için
   if test -z "$4"; then
-   echo -e "İşlem başlatılıyor..." >'/tmp/ses/X/xterm.log'
+   echo "İşlem başlatılıyor..." >'/tmp/ses/X/xterm.log'
    xterm -geometry 80x10-10+350 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/X/xterm.log"' &
    XM=$!
    set -- -m "$2" "$(xclip -o)" "$(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --window-icon="$HOME/.config/subses/subses.png" --file --save)"
   fi
-  echo -n >"/tmp/ses/X/bir.txt"
+  echo -ne >"/tmp/ses/X/bir.txt"
   al="$(tr '.|?|!' '\n' <<<"$3"|awk NF|sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//')"
   X=0
   A="$4"
@@ -346,7 +352,7 @@ if [[ "$1" =~ ^- ]]; then
   # Ses dosyalrı indexlenir ve birleştirilir.
   O=(/tmp/ses/X/*.mp3)
   if test "${#O[@]}" -eq "$(grep -c '[A-Za-z]' <<<"$al")"; then
-   echo -ne "\nSon işlem Başlatıldı: ${A}\n"
+   echo -ne "\r\nSon işlem Başlatıldı: ${A}\n"
    # Birleştirme yapılır başarılı olunduğunda mevcut işlem kloserü boşaltılır.
    ffmpeg -nostdin -loglevel quiet -f concat -safe 0 -i "/tmp/ses/X/bir.txt" -c:a copy "${A}" \
    && echo -ne "\r\n${m_i}${y_K}BİTTİ${y_X}${r_X}\n${y_K}${A}${y_X}\n"\
@@ -374,7 +380,7 @@ if [[ "$1" =~ ^- ]]; then
    yes|ffmpeg -nostdin -loglevel quiet -i "${doy}/${dos}" '/tmp/ses/sub.srt' >/dev/null\
    || echo "SRT Format HATASI.."
    sub=( "/tmp/ses/sub.srt" "${2}" )
-   echo >"${yol}.${sub[1]}.txt"
+   echo -ne >"${yol}.${sub[1]}.txt"
   else
   # Yad ile srt ve dil girdisi alımı.
    read -r sub< <(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --height=80 --width=300 \
@@ -386,7 +392,7 @@ if [[ "$1" =~ ^- ]]; then
    yes|ffmpeg -nostdin -loglevel quiet -i "${sub/_*/}" '/tmp/ses/sub.srt' >/dev/null\
    || echo "SRT Format HATASI.."
    sub=( "/tmp/ses/sub.srt" "`cut -d_ -f2 <<<"${sub}"`" )
-   echo >"${yol}.${sub[1]}.txt"
+   echo -ne >"${yol}.${sub[1]}.txt"
    # Xterm ile bilgilendirme penceresi gösterimi.
    echo "İŞLEM BAŞLATILIYOR..." >'/tmp/ses/xterm.log'
    xterm -geometry 80x10-10+350 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
@@ -406,7 +412,7 @@ if [[ "$1" =~ ^- ]]; then
     _oku=( $oku )
     MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${sub[0]}"|tr [:space:] ' '`"
     printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/sub.log'
-    echo -e "\r`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`"
+    echo -ne "\r`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`"
     if ps "$XM" &>/dev/null; then
      echo "`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`" >'/tmp/ses/xterm.log'
     fi
@@ -491,7 +497,7 @@ if [[ "$1" =~ ^- ]]; then
    ffmpeg -nostdin -loglevel quiet -i "${yol}.${sub[1]}.txt" "${yol}.${sub[1]}.srt" \
    && ( echo -e "TAMAMLANDI: \n '${yol}.${sub[1]}.srt' \n" >'/tmp/ses/xterm.log';
    echo -ne "\r\n${m_i}${y_K}TAMAMLANDI:${y_X}${r_X}\n${y_K}'${yol}.${sub[1]}.srt'${y_X}\n"; )\
-   || ( echo -e "\n${k_i}${y_K}SRT FORTMAT HATASI VERDİ${y_X}${r_X}\n${y_K}'${yol}.${sub[1]}.srt'";
+   || ( echo -e "\r\n${k_i}${y_K}SRT FORTMAT HATASI VERDİ${y_X}${r_X}\n${y_K}'${yol}.${sub[1]}.srt'";
    echo "SRT FORMAT HATASI....!" >'/tmp/ses/xterm.log'; )
    }
    rm -rf "${yol}.${sub[1]}.txt" '/tmp/ses/sub.srt' 2>/dev/null
@@ -516,7 +522,7 @@ if [[ "$1" =~ ^- ]]; then
    --field="<b><big><big>Kaydır sn</big></big></b>" "tr")
    sub=( "`cut -d_ -f1 <<<"$sub"`" "`cut -d_ -f2 <<<"$sub"`" )
   fi
-  echo -n >'/tmp/ses/sub.txt'
+  echo -ne >'/tmp/ses/sub.txt'
   echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${sub[0]/*\//}\nSN.: ${sub[1]}"
 
   # Altyazı zamanlama yapılacak kod döngü blok
