@@ -177,6 +177,9 @@ if [[ "${in[2]}" == 'ViDEO' ]]; then
  knt="$!"
  until ! ps "$knt" >/dev/null; do
   sleep 0.5
+  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  echo >'/tmp/ses/yt-X.log';
+  killall yt-dlp ; break ; }
   read -ra BK< <(strings /tmp/ses/yt-dlp.log|grep -w "\[download\]"|tail -n1)
   if test "$(strings /tmp/ses/yt-dlp.log|grep -c "\[download\]")" -ge 4; then
    echo "${BK[1]/.*/}"
@@ -207,6 +210,9 @@ elif [[ "${in[2]}" == 'SES' ]]; then
  knt="$!"
  until ! ps "$knt" >/dev/null; do
   sleep 0.5
+  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  echo >'/tmp/ses/yt-X.log';
+  killall yt-dlp ; break ; }
   read -ra BK< <(strings /tmp/ses/yt-dlp.log|grep -w "\[download\]"|tail -n1)
   if test "$(strings /tmp/ses/yt-dlp.log|grep -c "\[download\]")" -ge 4; then
    echo "${BK[1]/.*/}"
@@ -262,6 +268,9 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
  knt="$!"
  until ! ps "$knt" >/dev/null; do
   sleep 0.5
+  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  echo >'/tmp/ses/yt-X.log';
+  killall yt-dlp ; break ; }
   read -ra BK< <(strings /tmp/ses/yt-dlp.log|grep -w "\[download\]"|tail -n1)
   if test "$(strings /tmp/ses/yt-dlp.log|grep -c "\[download\]")" -ge 4; then
    echo "${BK[1]/.*/}"
@@ -291,9 +300,13 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
  rm '/tmp/ses/yt-dlp.log' 2>/dev/null
  kill -9 `ps aux|awk '$12 ~ /--no-buttons/{printf "%s ",$2}'` 2>/dev/null
  (
+ [[ -f '/tmp/ses/yt-X.log' ]] ||\
  yt-dlp -f "$NO" -o "${in[5]}/%(title)s.mp4" "${in[0]}" 2>&1|tee '/tmp/ses/yt-dlp.log' &
  knt2="$!"
  until ! ps "$knt2" >/dev/null; do
+  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  echo >'/tmp/ses/yt-X.log';
+  killall yt-dlp ; break ; }
   read -ra BK< <(strings /tmp/ses/yt-dlp.log|grep -w "\[download\]"|tail -n1)
   if test "$(strings /tmp/ses/yt-dlp.log|grep -c "\[download\]")" -ge 4; then
    echo "${BK[1]/.*/}"
@@ -316,6 +329,7 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
  ViD="$(awk -F: '/Destination:/{print $2}' '/tmp/ses/yt-dlp.log'|sed s/'\s'// )"
  kill -9 `ps aux|awk '$12 ~ /--no-buttons/{printf "%s ",$2}'` 2>/dev/null
  (
+ [[ -f '/tmp/ses/yt-X.log' ]] ||\
  nohup ffmpeg -i "$ViD" -i "$SES" -c copy "${SES/.*/}.mkv" > '/tmp/ses/ff.log' &
  ff=$!
  i=0
@@ -323,8 +337,11 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
   echo "$i"
   echo "# $(iconv '/tmp/ses/ff.log'|awk '/frame/{print $6,$7,$9,$10|"tail -n1"}')"
   sleep 0.1
+  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  echo >'/tmp/ses/yt-X.log';
+  killall ffmpeg ; break ; }
   ((i++)) || true
- done|yad --no-buttons --progress --title="𝕊𝕌𝔹𝕊𝔼𝕊" --width=500 \
+ done|yad --no-buttons --progress --title="𝕊𝕌𝔹𝕊𝔼𝕊" --width=400 \
      --pulsate \
      --text="Video ve Ses Dosyaları birkleştiriliyor..." \
      --window-icon="$HOME/.config/subses/subses.png" &
@@ -332,8 +349,8 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
  kill -9 `ps aux|awk '$12 ~ /--no-buttons/{printf "%s ",$2}'` 2>/dev/null
  )
  sleep 1
- rm -rf '/tmp/ses/ff.log' '/tmp/ses/yt-dlp.log' 2>/dev/null
 fi
+rm -rf '/tmp/ses/ff.log' '/tmp/ses/yt-dlp.log' '/tmp/ses/yt-X.log' 2>/dev/null
 ;;
 Wget)
 wget -P "${in[5]}" "${in[0]}" 2>&1|tee '/tmp/ses/wget.log' &
