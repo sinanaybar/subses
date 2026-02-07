@@ -87,14 +87,14 @@ function dublaj() {
  fi
 
  # Yad ile veri girdisi kontrol edilerek işlem başlatılır.
- if read -r BiL< <(yad --form --title="𝕊𝕌𝔹𝕊𝔼𝕊" --separator='_' \
+ if read -r BiL< <(yad --form --title="𝕊𝕌𝔹𝕊𝔼𝕊" --separator='#' \
     --window-icon="$HOME/.config/subses/subses.png" \
     --field="Altyazı Seç":FL "hata" \
     --field='Sub Hızı' '1.5' \
     --field="Sub Dil kodu: " 'tr' \
     --field="KAPAT":SW "FALSE"); then
  echo -ne >'/tmp/ses/sub.log'
- BiL=( "`cut -d_ -f1 <<<"$BiL"`" "`cut -d_ -f2 <<<"$BiL"`" "`cut -d_ -f3 <<<"$BiL"`" "`cut -d_ -f4 <<<"$BiL"`" )
+ BiL=( "`cut -d# -f1 <<<"$BiL"`" "`cut -d# -f2 <<<"$BiL"`" "`cut -d# -f3 <<<"$BiL"`" "`cut -d# -f4 <<<"$BiL"`" )
  # xterm bilgi verilmek için başlatılır.
  xterm -geometry 80x10-10+300 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
  XM=$!
@@ -146,10 +146,9 @@ function dublaj() {
      echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n\n`fmt -sw 70 <<<"$Q"`" >'/tmp/ses/xterm.log'
     fi
    fi
-   sleep 0.900
   fi
-  sleep 0.100
   echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n\n`fmt -sw 70 <<<"$Q"`" >'/tmp/ses/xterm.log'
+  sleep 1
  done 2>/dev/null
  rm '/tmp/ses/xterm.log' 2>/dev/null
  else
