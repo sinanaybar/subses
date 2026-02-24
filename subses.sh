@@ -67,6 +67,15 @@ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
 
 # Dublajlı olarak seslendirme işlem.
 function dublaj() {
+# Mevcut sınırı geçen altyazıları parçalı olarak okuma işlemi
+function uzun() {
+fmt -sw 150 <<<"$3" >"/tmp/ses/i.ini"
+while read -r oku; do
+ test -e "/tmp/ses/i.ini" || break
+ [[ "$oku" =~ ([A-Za-z]) ]] && mpv --no-terminal --speed="$2" \
+ "https://translate.google.com/translate_tts?ie=UTF-8&tl=${1}&client=tw-ob&q=${oku}"
+done <"/tmp/ses/i.ini"
+}
  # Mpv çalıyor mu diye kontrol edilir.
  if pidof mpv >/dev/null; then
   echo -ne "İŞLEM BAŞLATILIYOR..." >'/tmp/ses/xterm.log'
@@ -87,14 +96,14 @@ function dublaj() {
  fi
 
  # Yad ile veri girdisi kontrol edilerek işlem başlatılır.
- if read -r BiL< <(yad --form --title="𝕊𝕌𝔹𝕊𝔼𝕊" --separator='#' \
+ if read -r BiL< <(yad --form --title="𝕊𝕌𝔹𝕊𝔼𝕊" --separator='_' \
     --window-icon="$HOME/.config/subses/subses.png" \
     --field="Altyazı Seç":FL "hata" \
     --field='Sub Hızı' '1.5' \
     --field="Sub Dil kodu: " 'tr' \
     --field="KAPAT":SW "FALSE"); then
  echo -ne >'/tmp/ses/sub.log'
- BiL=( "`cut -d# -f1 <<<"$BiL"`" "`cut -d# -f2 <<<"$BiL"`" "`cut -d# -f3 <<<"$BiL"`" "`cut -d# -f4 <<<"$BiL"`" )
+ BiL=( "`cut -d_ -f1 <<<"$BiL"`" "`cut -d_ -f2 <<<"$BiL"`" "`cut -d_ -f3 <<<"$BiL"`" "`cut -d_ -f4 <<<"$BiL"`" )
  # xterm bilgi verilmek için başlatılır.
  xterm -geometry 80x10-10+300 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
  XM=$!
@@ -125,30 +134,41 @@ function dublaj() {
  # Hazırlanan altyazı log dosyası ile mpv log dosyası kullanılarak döngüye girilir.
  OY=( "KAPATILAN:" "0" )
  until ! ps "$XM" &>/dev/null; do
-  ZN=( `strings '/tmp/ses/mpv'|awk '/^AV:/{print $2" --> "$4| "tail -n1"}'` )
+  ZN=( `strings '/tmp/ses/mpv'|tail -n1|awk '{print $2" --> "$4}'` )
   if grep "^${ZN[0]}_" '/tmp/ses/sub.log' >/dev/null; then
    Q="$(awk -F_ '/^'"${ZN[0]}"'/{printf "%s ",$2}' '/tmp/ses/sub.log'\
    |sed -e 's/[[][^[]*]//g' -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//')"
    if [[ "${BiL[3]}" =~ 'TRUE' ]]; then
+    test -e "/tmp/ses/i.ini" && rm "/tmp/ses/i.ini"
     kill -9 "`ps axu|awk '$11=="mpv" && /--no-terminal/{printf "%s ",$2}'`" 2>/dev/null && \
     OY=( "KAPATILAN:" "$((OY[1]+1))" )
    fi
    if ! strings '/tmp/ses/mpv'|tail -n1|grep -w '^(Paused)' >/dev/null; then
-    [[ "$Q" =~ ([A-Za-z]) ]] && mpv --no-terminal --speed="${BiL[1]}" \
-    "https://translate.google.com/translate_tts?ie=UTF-8&tl=${BiL[2]}&client=tw-ob&q=${Q}" &
-    if awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|\
-    grep '^\[.*\]' >/dev/null; then
-     awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|\
-     sed -e 's/\s\{1,\}//'|grep '\[.*\]'|\
-     awk -F']' -v z="${ZN[*]}" -v d="${BiL[2]}" -v t="${BiL[1]}" -v o="${OY[*]}" '{
-      print z"\t\t"d"-"t"\t\t"o"\n\n"$1"]\n\n"$2}'|fmt -sw 70 >'/tmp/ses/xterm.log'
+    if (( "${#Q}" <= "200" )); then
+     [[ "$Q" =~ ([A-Za-z]) ]] && mpv --no-terminal --speed="${BiL[1]}" \
+     "https://translate.google.com/translate_tts?ie=UTF-8&tl=${BiL[2]}&client=tw-ob&q=${Q}" &
+     if awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|grep '^\[.*\]' >/dev/null; then
+      awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|grep '\[.*\]'|\
+      awk -F']' -v z="${ZN[*]}" -v d="${BiL[2]}" -v t="${BiL[1]}" -v o="${OY[*]}" '{
+          print z"\t\t"d"-"t"\t\t"o"\n"$1"]\n"$2}'|fmt -sw 90 >'/tmp/ses/xterm.log'
     else
-     echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n\n`fmt -sw 70 <<<"$Q"`" >'/tmp/ses/xterm.log'
+     echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n`fmt -sw 90 <<<"$Q"`" >'/tmp/ses/xterm.log'
+     fi
+    else
+     uzun "${BiL[2]}" "${BiL[1]}" "$Q" &
+     if awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|grep '^\[.*\]' >/dev/null; then
+      awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|grep '\[.*\]'|\
+      awk -F']' -v z="${ZN[*]}" -v d="${BiL[2]}" -v t="${BiL[1]}" -v o="${OY[*]}" '{
+          print z"\t\t"d"-"t"\t\t"o"\n"$1"]\n"$2}'|fmt -sw 90 >'/tmp/ses/xterm.log'
+     else
+      echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n`fmt -sw 90 <<<"$Q"`" >'/tmp/ses/xterm.log'
+     fi
     fi
    fi
+   sleep 0.900
   fi
-  echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n\n`fmt -sw 70 <<<"$Q"`" >'/tmp/ses/xterm.log'
-  sleep 1
+  sleep 0.100
+  echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n`fmt -sw 80 <<<"$Q"`" >'/tmp/ses/xterm.log'
  done 2>/dev/null
  rm '/tmp/ses/xterm.log' 2>/dev/null
  else
