@@ -418,7 +418,7 @@ if [[ "$1" =~ ^- ]]; then
     fi
    done && rm '/tmp/ses/Z.log'
    echo -ne "\r\n"
-   echo -ne "\r${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${dos}\nDiL: ${sub[1]}"
+   echo -ne "\r${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${dos}\nDiL: ${sub[1]}\n"
 
    # İptal etme olasılığına karşın artık dosya temizleme.
    cop() {
