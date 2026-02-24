@@ -26,6 +26,7 @@ s_i="\e[1;33m"
 m_i='\e[1;34m'
 m_r='\e[1;35m'
 r_X="\e[0m"
+[[ ! -d "/tmp/ses/ff" ]] && mkdir -p "/tmp/ses/ff"
 
 # Gerekli yardımcı uyg kontrol işlemi.
 test -f "$HOME/.config/subses/subses.png" || {
@@ -105,8 +106,6 @@ find '/tmp/ses' -type f \( \
     -o -iname "*.log" \) -exec rm -rf {} \;
 }
 
-[[ ! -d "/tmp/ses/ff" ]] && mkdir -p "/tmp/ses/ff"
-
 # Ses dosya oluşturma yapıldığı için, çoklu çalışmalar da çakışmaya neden olabilir.
 # Bu yüzden mümkün olduğunca mevcut işleminiz bitmesini bekleyin..! Uyarı bölümü.
 if [[ "$(ps axu|awk '{if($11=="bash" && $12=="subses") print $2| "wc -l"}')" -ge 3 ]]; then
@@ -121,12 +120,12 @@ Devam etmek istiyor musunuz ?" \
 [ $? = 0 ] || exit 0
 fi
 
-# İşlemlere başlamadan önce /tmp/ses içi temizlik
-[[ "$(du -cs '/tmp/ses'|head -n1|cut -f1)" != 0 ]] && TEMiZLE 2>/dev/null
-
 if [[ "$1" =~ ^- ]]; then
   case $1 in
   -s)
+  # İşlemlere başlamadan önce /tmp/ses içi temizlik
+  [[ "$(du -s '/tmp/ses/ff'|head -n1|cut -f1)" != 0 ]] && \
+  find '/tmp/ses' -type f \( -iname "*.mp3" -o -iname "*.mp4" \) -exec rm -rf {} \;
   # Dublaj Ses dosyası oluşturma komut blok
   trap TEMiZLE EXIT
   g2="`pwd`/$2"
@@ -165,6 +164,7 @@ if [[ "$1" =~ ^- ]]; then
   done
 
   # Elde edilen altyazı metin dosyası ile diğer girdiler dolar değerine atanır.
+  rm '/tmp/ses/Z_M.log'
   VX=( "/tmp/ses/srt.log" "${3/-*/}" "${3/*-/}" "$4" )
   echo -ne "\r\n"
   echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nViD: ${4/*\//}\nSUB: ${2/*\//}\nDiL: ${3/-*/}"
@@ -290,16 +290,15 @@ if [[ "$1" =~ ^- ]]; then
       done
       echo -ne "\r\n"
       echo -ne "\r${m_i}${y_K}TAMAMLANDI:${y_x}${r_X} '${VX[3]/.*/}.${VX[1]}.mkv'"
-      TEMiZLE 2>/dev/null
       ;;
       2)
       echo -ne "\r${m_i}${y_K}TAMAMLANDI:${y_x}${r_X} '${VX[3]/.*/}.${VX[1]}.mp3'"
-      TEMiZLE 2>/dev/null
       ;;
      esac
     fi
    fi
   done
+  rm -rf '/tmp/ses/ff/bir.log' '/tmp/ses/f1.txt' '/tmp/ses/A.log' '/tmp/ses/XX.log' '/tmp/ses/srt.log' '/tmp/ses/sub.log' 2>/dev/null
   ;;
   -m)
   # X kloser kontrol varsa içi boşaltılır, yoksa oluşturulur.
@@ -320,7 +319,7 @@ if [[ "$1" =~ ^- ]]; then
   R="$(grep -c '[A-Za-z]' <<<"$al")"
   echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSES: ${A}\nDiL: ${2}"
   cop() {
-  find '/tmp/ses' -type f \( \
+  find '/tmp/ses/X' -type f \( \
                   -iname "*.txt" \
                   -o -iname "*.mp3" \
                   -o -iname "*.log" \) -exec rm -rf {} \;
@@ -368,7 +367,8 @@ if [[ "$1" =~ ^- ]]; then
     echo -e "\r\n${k_i}${y_K}İŞLEM HATASI...! ${y_X}${r_X}"
    fi
   fi
-  if ps "$XM" &>/dev/null; then kill -9 "$XM"; fi 2>/dev/null
+  if ps "$XM" &>/dev/null; then kill -9 "$XM"; fi
+  cop 2>/dev/null
   ;;
   -c)
   # Altyazı varlığı kontrol ediliyor, yoksa yad kullanılarak kullanıcıdan istenir.
@@ -405,10 +405,10 @@ if [[ "$1" =~ ^- ]]; then
    paste -- \
    <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}"|sed '$d') \
    <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}"|sed '1d')|\
-   awk -F: '{print $2":"$3":"$4,$1}' >'/tmp/ses/Z_M.log'
+   awk -F: '{print $2":"$3":"$4,$1}' >'/tmp/ses/Z.log'
    grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}"|tail -n1|\
-   awk -F: -v s="$(wc -l <"${sub[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/Z_M.log'
-   strings '/tmp/ses/Z_M.log'|while read -r oku; do
+   awk -F: -v s="$(wc -l <"${sub[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/Z.log'
+   strings '/tmp/ses/Z.log'|while read -r oku; do
     _oku=( $oku )
     MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${sub[0]}"|tr [:space:] ' '`"
     printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/sub.log'
@@ -416,7 +416,7 @@ if [[ "$1" =~ ^- ]]; then
     if ps "$XM" &>/dev/null; then
      echo "`wc -l <'/tmp/ses/sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`" >'/tmp/ses/xterm.log'
     fi
-   done
+   done && rm '/tmp/ses/Z.log'
    echo -ne "\r\n"
    echo -ne "\r${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${dos}\nDiL: ${sub[1]}"
 
@@ -508,6 +508,7 @@ if [[ "$1" =~ ^- ]]; then
    if ps "$XM" &>/dev/null; then kill -9 "$XM"; fi 2>/dev/null
    echo "SRT Formatını Kontrol edin ve tekrardan deneyin...!"
   fi
+  rm -rf "${yol}.${sub[1]}.txt" '/tmp/ses/sub.srt' '/tmp/ses/xterm.log' '/tmp/ses/sub.log' 2>/dev/null
   ;;
   -z)
   # Altyazı zaman ayarlarını değiştirme. Gerekli dosya varlıkları kontrol edilir yoksa yad ile istenir.
@@ -522,7 +523,7 @@ if [[ "$1" =~ ^- ]]; then
    --field="<b><big><big>Kaydır sn</big></big></b>" "tr")
    sub=( "`cut -d_ -f1 <<<"$sub"`" "`cut -d_ -f2 <<<"$sub"`" )
   fi
-  echo -ne >'/tmp/ses/sub.txt'
+  echo -ne >'/tmp/ses/subx.txt'
   echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${sub[0]/*\//}\nSN.: ${sub[1]}"
 
   # Altyazı zamanlama yapılacak kod döngü blok
@@ -540,7 +541,7 @@ if [[ "$1" =~ ^- ]]; then
      }' <<<"$oku")
      X="`printf "%02d:%02d:%02d" "$((${II[0]/.*/}/3600))" "$((${II[0]/.*/}%3600/60))" "$((${II[0]/.*/}%60))"`"
      S="`printf "%02d:%02d:%02d" "$((${II[1]/.*/}/3600))" "$((${II[1]/.*/}%3600/60))" "$((${II[1]/.*/}%60))"`"
-     echo "$X,${II[0]/*./} --> $S,${II[1]/*./}" >>'/tmp/ses/sub.txt'
+     echo "$X,${II[0]/*./} --> $S,${II[1]/*./}" >>'/tmp/ses/subx.txt'
     else
      read -ra II< <(awk -F':|,|-->' -v x="$(tr -d '+' <<<"${sub[1]}")" '{
      a = $1*60*60+$2*60+$3"."$4;
@@ -550,12 +551,12 @@ if [[ "$1" =~ ^- ]]; then
      }' <<<"$oku")
      X="`printf "%02d:%02d:%02d" "$((${II[0]/.*/}/3600))" "$((${II[0]/.*/}%3600/60))" "$((${II[0]/.*/}%60))"`"
      S="`printf "%02d:%02d:%02d" "$((${II[1]/.*/}/3600))" "$((${II[1]/.*/}%3600/60))" "$((${II[1]/.*/}%60))"`"
-     echo "$X,${II[0]/*./} --> $S,${II[1]/*./}" >>'/tmp/ses/sub.txt'
+     echo "$X,${II[0]/*./} --> $S,${II[1]/*./}" >>'/tmp/ses/subx.txt'
     fi
    else
-    echo "$oku" >>'/tmp/ses/sub.txt'
+    echo "$oku" >>'/tmp/ses/subx.txt'
    fi
-   aa=$(grep -c '[0-9][0-9]:' '/tmp/ses/sub.txt')
+   aa=$(grep -c '[0-9][0-9]:' '/tmp/ses/subx.txt')
    Y=$(("${aa}*100/${bb}*100"/100))
    B=$(("${Y}*5"/10))
    K=$((50-B))
@@ -563,17 +564,17 @@ if [[ "$1" =~ ^- ]]; then
    E=$(perl -E 'say "╺"x'"$K")
    # shellcheck disable=SC2027
    j="\e[1;3"${D:i++%${#D}:1}"m"
-   echo -ne "\r${y_K}`du -h '/tmp/ses/sub.txt'|cut -f1`${y_X}${j}\
+   echo -ne "\r${y_K}`du -h '/tmp/ses/subx.txt'|cut -f1`${y_X}${j}\
    ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
   done <"${sub[0]}"
 
   # Düzenlenmiş altyazı metin dosyası srt dönüştürülür.
-  if ffmpeg -nostdin -loglevel quiet -i '/tmp/ses/sub.txt' "${sub[0]/.*/}.sn.srt"; then
+  if ffmpeg -nostdin -loglevel quiet -i '/tmp/ses/subx.txt' "${sub[0]/.*/}.sn.srt"; then
    echo -e "\n${m_i}${y_K}İŞLEM TAMAMLANDI...${y_X}${r_X}"
-   rm '/tmp/ses/sub.txt' 2>/dev/null
+   rm '/tmp/ses/subx.txt' 2>/dev/null
   else
    echo -e "\n${k_i}${y_K}İŞLEM HATASI...! ${y_X}${r_X}"
-   rm '/tmp/ses/sub.txt' 2>/dev/null
+   rm '/tmp/ses/subx.txt' 2>/dev/null
   fi
   ;;
   -k)
@@ -620,8 +621,8 @@ if [[ "$1" =~ ^- ]]; then
     [[ ! -e '/tmp/ses/AT' ]] && break
    done <'/tmp/ses/AT'
    kill -9 "$_yad" 2>/dev/null
-   rm -rf '/tmp/ses/AT' 2>/dev/null
   fi
+  rm -rf '/tmp/ses/AT' 2>/dev/null
   ;;
   -t)
   # 3.cü değer kontrol edilir, mevcut ise alınır yoksa panodan aktarılır.
