@@ -301,30 +301,29 @@ if [[ "$1" =~ ^- ]]; then
   rm -rf '/tmp/ses/ff/bir.log' '/tmp/ses/f1.txt' '/tmp/ses/A.log' '/tmp/ses/XX.log' '/tmp/ses/srt.log' '/tmp/ses/sub.log' 2>/dev/null
   ;;
   -m)
+  cop() {
+  find '/tmp/ses/X' -type f \( \
+                  -iname "*.txt" \
+                  -o -iname "*.mp3" \
+                  -o -iname "*.log" \) -exec rm -rf {} \;
+  }
   # X kloser kontrol varsa içi boşaltılır, yoksa oluşturulur.
-  if test -d '/tmp/ses/X'; then rm /tmp/ses/X/* 2>/dev/null; else mkdir -p '/tmp/ses/X'; fi
+  if test -d '/tmp/ses/X'; then cop; else mkdir -p '/tmp/ses/X'; fi
   # Xterm çalıştırılır bilgi vermek için
   if test -z "$4"; then
    echo "İşlem başlatılıyor..." >'/tmp/ses/X/xterm.log'
    xterm -geometry 80x10-10+350 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/X/xterm.log"' &
    XM=$!
-   set -- -m "$2" "$(xclip -o)" "$(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --window-icon="$HOME/.config/subses/subses.png" --file --save)"
+   set -- "-m" "$2" "$(xclip -o)" "$(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --window-icon="$HOME/.config/subses/subses.png" --file --save)"
   fi
   echo -ne >"/tmp/ses/X/bir.txt"
-  al="$(tr '.|?|!' '\n' <<<"$3"|awk NF|sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//')"
+  al="$(tr '.|?|!|,|:|;' '\n' <<<"$3"|awk NF|sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//')"
   X=0
   A="$4"
   i="0"
   D="01234567"
   R="$(grep -c '[A-Za-z]' <<<"$al")"
   echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSES: ${A}\nDiL: ${2}"
-  cop() {
-  find '/tmp/ses/X' -type f \( \
-                  -iname "*.txt" \
-                  -o -iname "*.mp3" \
-                  -o -iname "*.log" \) -exec rm -rf {} \;
-  rm "${yol}.${sub[1]}.txt" 2>/dev/null
-  }
   # İptal olmasına karşın dosyaları silmek için tuzak kuralım.
   trap cop EXIT
   # GOOGLE URL kullanılarak ses dosyalar yapılır.
@@ -344,7 +343,7 @@ if [[ "$1" =~ ^- ]]; then
     j="\e[1;3"${D:i++%${#D}:1}"m"
     echo -ne "\r${y_K}`du -hs '/tmp/ses/X'|cut -f1`${y_X}${j}\
     ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
-    if ps "$XM" &>/dev/null; then echo "${P}>${W} ╏${T}${E}╏${Y}%" >'/tmp/ses/X/xterm.log'; fi
+    if ps "$XM" 2>/dev/null; then echo "${P}>${W} ╏${T}${E}╏${Y}%" >'/tmp/ses/X/xterm.log'; fi
    fi
   done <<<"$al"
 
@@ -356,10 +355,10 @@ if [[ "$1" =~ ^- ]]; then
    ffmpeg -nostdin -loglevel quiet -f concat -safe 0 -i "/tmp/ses/X/bir.txt" -c:a copy "${A}" \
    && echo -ne "\r\n${m_i}${y_K}BİTTİ${y_X}${r_X}\n${y_K}${A}${y_X}\n"\
    || echo -e "\nHatalı işlem.."
-   if ps "$XM" &>/dev/null; then echo "BİTTİ: ${A}" >'/tmp/ses/X/xterm.log'; fi 2>/dev/null
+   if ps "$XM" 2>/dev/null; then echo "BİTTİ: ${A}" >'/tmp/ses/X/xterm.log'; fi
   else
    # Hatalı işlem alınırsa yad ile bilgilendirilir.
-   if ps "$XM" &>/dev/null; then
+   if ps "$XM" 2>/dev/null; then
     yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
         --window-icon="$HOME/.config/subses/subses.png" \
         --height=10 --width=400 --dnd --text="Hatalı işlem sonu.."
@@ -367,7 +366,7 @@ if [[ "$1" =~ ^- ]]; then
     echo -e "\r\n${k_i}${y_K}İŞLEM HATASI...! ${y_X}${r_X}"
    fi
   fi
-  if ps "$XM" &>/dev/null; then kill -9 "$XM"; fi
+  if ps "$XM" 2>/dev/null; then kill -9 "$XM" 2>/dev/null; fi
   cop 2>/dev/null
   ;;
   -c)
