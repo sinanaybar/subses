@@ -64,17 +64,16 @@ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
      --height=100 --width=300 \
      --text="Gerekli Dosyalar Konumda Değil..!\n$HOME/.config/subses/dil.log";
 }
-
 # Dublajlı olarak seslendirme işlem.
 function dublaj() {
 # Mevcut sınırı geçen altyazıları parçalı olarak okuma işlemi
 function uzun() {
-fmt -sw 150 <<<"$3" >"/tmp/ses/i.ini"
+fmt -sw 150 <<<"$3" >'/tmp/ses/i.ini'
 while read -r oku; do
- test -e "/tmp/ses/i.ini" || break
+ test -e '/tmp/ses/i.ini'|| break
  [[ "$oku" =~ ([A-Za-z]) ]] && mpv --no-terminal --speed="$2" \
  "https://translate.google.com/translate_tts?ie=UTF-8&tl=${1}&client=tw-ob&q=${oku}"
-done <"/tmp/ses/i.ini"
+done <'/tmp/ses/i.ini'
 }
  # Mpv çalıyor mu diye kontrol edilir.
  if pidof mpv >/dev/null; then
@@ -94,33 +93,36 @@ done <"/tmp/ses/i.ini"
       --height=100 --width=300 \
       --text="Çalışmakta olan MPV uyg Bulunamadı..."
  fi
-
  # Yad ile veri girdisi kontrol edilerek işlem başlatılır.
- if read -r BiL< <(yad --form --title="𝕊𝕌𝔹𝕊𝔼𝕊" --separator='_' \
+ if read -r BiL< <(yad --form --title="𝕊𝕌𝔹𝕊𝔼𝕊" --separator='#' \
     --window-icon="$HOME/.config/subses/subses.png" \
     --field="Altyazı Seç":FL "hata" \
     --field='Sub Hızı' '1.5' \
     --field="Sub Dil kodu: " 'tr' \
     --field="KAPAT":SW "FALSE"); then
- echo -ne >'/tmp/ses/sub.log'
- BiL=( "`cut -d_ -f1 <<<"$BiL"`" "`cut -d_ -f2 <<<"$BiL"`" "`cut -d_ -f3 <<<"$BiL"`" "`cut -d_ -f4 <<<"$BiL"`" )
+ echo -ne >'/tmp/ses/suB.log'
+ [[ "${BiL/.*/}" =~ "#" ]] &&\
+ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+     --window-icon="$HOME/.config/subses/subses.png" \
+     --height=100 --width=300 \
+     --text="Altyazı adından # kaldırın."
+ BiL=( "`cut -d# -f1 <<<"$BiL"`" "`cut -d# -f2 <<<"$BiL"`" "`cut -d# -f3 <<<"$BiL"`" "`cut -d# -f4 <<<"$BiL"`" )
  # xterm bilgi verilmek için başlatılır.
  xterm -geometry 80x10-10+300 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
  XM=$!
-
  # Altyazı biçimleme ve düzenleme başlatılır.
  XX="$(grep -c "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]," "${BiL[0]}")"
  paste -- \
   <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "${BiL[0]}"|sed '$d') \
   <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "${BiL[0]}"|sed '1d')|\
-  awk -F: '{print $2":"$3":"$4,$1}' >'/tmp/ses/Z_M.log'
+  awk -F: '{print $2":"$3":"$4,$1}' >'/tmp/ses/M.log'
  grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "${BiL[0]}"|tail -n1|\
-  awk -F: -v s="$(wc -l <"${BiL[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/Z_M.log'
- strings '/tmp/ses/Z_M.log'|while read -r oku; do
+  awk -F: -v s="$(wc -l <"${BiL[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/M.log'
+ strings '/tmp/ses/M.log'|while read -r oku; do
    _oku=( $oku )
-   MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${BiL[0]}"|tr [:space:] ' '`"
-   printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/sub.log'
-   iX="$(grep -c "[0-9]_" '/tmp/ses/sub.log')"
+   MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-3))"'p' "${BiL[0]}"|tr [:space:] ' '`"
+   printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/suB.log'
+   iX="$(grep -c "[0-9]_" '/tmp/ses/suB.log')"
    Y=$(("${iX}*100/${XX}*100"/100))
    B=$(("${Y}*5"/10))
    K=$((50-B))
@@ -128,18 +130,17 @@ done <"/tmp/ses/i.ini"
    E=$(perl -E 'say "╺"x'"$K")
    echo -e "\n${iX}>${XX} ╏${T}${E}╏${Y}%" >'/tmp/ses/xterm.log'
  done 2>/dev/null
- rm -rf '/tmp/ses/Z_M.log'
+ rm -rf '/tmp/ses/M.log'
  echo -e "\nHAZIRLIK TAMAMLANDI VİDEO BAŞLATIN..!\n\t İYİ SEYİRLER" >'/tmp/ses/xterm.log'
-
  # Hazırlanan altyazı log dosyası ile mpv log dosyası kullanılarak döngüye girilir.
  OY=( "KAPATILAN:" "0" )
  until ! ps "$XM" &>/dev/null; do
   ZN=( `strings '/tmp/ses/mpv'|tail -n1|awk '{print $2" --> "$4}'` )
-  if grep "^${ZN[0]}_" '/tmp/ses/sub.log' >/dev/null; then
-   Q="$(awk -F_ '/^'"${ZN[0]}"'/{printf "%s ",$2}' '/tmp/ses/sub.log'\
+  if grep "^${ZN[0]}_" '/tmp/ses/suB.log' >/dev/null; then
+   Q="$(awk -F_ '/^'"${ZN[0]}"'/{printf "%s ",$2}' '/tmp/ses/suB.log'\
    |sed -e 's/[[][^[]*]//g' -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//')"
    if [[ "${BiL[3]}" =~ 'TRUE' ]]; then
-    test -e "/tmp/ses/i.ini" && rm "/tmp/ses/i.ini"
+    test -e '/tmp/ses/i.ini' && rm '/tmp/ses/i.ini'
     kill -9 "`ps axu|awk '$11=="mpv" && /--no-terminal/{printf "%s ",$2}'`" 2>/dev/null && \
     OY=( "KAPATILAN:" "$((OY[1]+1))" )
    fi
@@ -147,8 +148,8 @@ done <"/tmp/ses/i.ini"
     if (( "${#Q}" <= "200" )); then
      [[ "$Q" =~ ([A-Za-z]) ]] && mpv --no-terminal --speed="${BiL[1]}" \
      "https://translate.google.com/translate_tts?ie=UTF-8&tl=${BiL[2]}&client=tw-ob&q=${Q}" &
-     if awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|grep '^\[.*\]' >/dev/null; then
-      awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|grep '\[.*\]'|\
+     if awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/suB.log'|sed -e 's/\s\{1,\}//'|grep '^\[.*\]' >/dev/null; then
+      awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/suB.log'|sed -e 's/\s\{1,\}//'|grep '\[.*\]'|\
       awk -F']' -v z="${ZN[*]}" -v d="${BiL[2]}" -v t="${BiL[1]}" -v o="${OY[*]}" '{
           print z"\t\t"d"-"t"\t\t"o"\n"$1"]\n"$2}'|fmt -sw 90 >'/tmp/ses/xterm.log'
     else
@@ -156,8 +157,8 @@ done <"/tmp/ses/i.ini"
      fi
     else
      uzun "${BiL[2]}" "${BiL[1]}" "$Q" &
-     if awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|grep '^\[.*\]' >/dev/null; then
-      awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/sub.log'|sed -e 's/\s\{1,\}//'|grep '\[.*\]'|\
+     if awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/suB.log'|sed -e 's/\s\{1,\}//'|grep '^\[.*\]' >/dev/null; then
+      awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/suB.log'|sed -e 's/\s\{1,\}//'|grep '\[.*\]'|\
       awk -F']' -v z="${ZN[*]}" -v d="${BiL[2]}" -v t="${BiL[1]}" -v o="${OY[*]}" '{
           print z"\t\t"d"-"t"\t\t"o"\n"$1"]\n"$2}'|fmt -sw 90 >'/tmp/ses/xterm.log'
      else
@@ -165,12 +166,10 @@ done <"/tmp/ses/i.ini"
      fi
     fi
    fi
-   sleep 0.900
   fi
-  sleep 0.100
   echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n`fmt -sw 80 <<<"$Q"`" >'/tmp/ses/xterm.log'
+  sleep 1
  done 2>/dev/null
- rm '/tmp/ses/xterm.log' 2>/dev/null
  else
   notify-send --icon="$HOME/.config/subses/subses.png" "Altyazı ve Ayarlar Seçilemedi..!"
  fi
@@ -395,14 +394,15 @@ rm '/tmp/ses/wget.log' 2>/dev/null
 esac
 }
 # Mpv çıktısı yönlendilir. Hatalı çıktısı yazdırılır.
-function oynat() {
+function oyna() {
 [[ "$2" =~ FALSE ]] && url="$1" || url="$3"
 if nohup  mpv --pause --cache-pause-initial=yes --autofit=100%x480 "$url" >'/tmp/ses/mpv'; then
- rm -rf '/tmp/ses/mpv' '/tmp/ses/sub.log' 2>/dev/null
+ rm -rf '/tmp/ses/mpv' '/tmp/ses/suB.log' '/tmp/ses/i.in' '/tmp/ses/xterm.log' 2>/dev/null
 else
  yad --on-top --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
      --window-icon="$HOME/.config/subses/subses.png" \
      --height=100 --width=300 --text="MPV hata verdi, video oynatılamadı..."
+ rm -rf '/tmp/ses/mpv' '/tmp/ses/suB.log' '/tmp/ses/i.in' '/tmp/ses/xterm.log' 2>/dev/null
 fi
 killall xterm 2>/dev/null
 }
@@ -463,14 +463,13 @@ function bol() {
   trap cop EXIT
   # Gerekli dosya varlık kontrol edilir yoksa yad ile istenir.
    read -r sub< <(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-    --form --item-separator='!' --separator='_' \
+    --form --item-separator='!' --separator='#' \
     --window-icon="$HOME/.config/subses/subses.png" \
     --field="Video Seç":FL             "/*.mp4" \
     --field="Altyazı Seç":FL           "/*.srt" \
     --field="Buraya kadar kes: "       '00:00:00') || exit 2
-   sub=( "`cut -d_ -f1 <<<"$sub"`" "`cut -d_ -f2 <<<"$sub"`" "`cut -d_ -f3 <<<"$sub"`" )
+   sub=( "`cut -d# -f1 <<<"$sub"`" "`cut -d# -f2 <<<"$sub"`" "`cut -d# -f3 <<<"$sub"`" )
    xterm -geometry 80x10-10+300 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
-
   read -r bak< <(awk -F':' '{print $1*60*60+$2*60+$3}' <<<"${sub[2]}")
   read -r son< <(ffprobe "${sub[0]}" 2>&1 | awk '/Duration:/{print $2}')
   echo -ne "\n"
@@ -489,7 +488,6 @@ function bol() {
    sleep 0.5
    pidof xterm && du -h "${sub[0]/.*/}.CD1.mp4" "${sub[0]/.*/}.CD2.mp4" >'/tmp/ses/xterm.log'
   done
-
   # Altyazıyı bölünecek metin dosyasına döngü blok
   s=0
   while read -r al; do
@@ -514,10 +512,8 @@ function bol() {
     fi
    fi
   done <"${sub[1]}"
-
   # Bölünen altyazı metin dosyaları srt dönüştürülür.
   ffmpeg -nostdin -loglevel quiet -i '/tmp/ses/CD1.txt' "${sub[0]/.*/}.CD1.srt"
-
   # Bölünen srt dosyaları bölünen zamana göre yeniden zamanlanır.
   ZAMAN "$bak" "/tmp/ses/CD2.txt" && \
   ffmpeg -nostdin -loglevel quiet -i '/tmp/ses/sub.txt' "${sub[0]/.*/}.CD2.srt"
@@ -539,10 +535,10 @@ read -r VS< <(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
      --height=80 --width=300 \
      --window-icon="$HOME/.config/subses/subses.png" \
      --text="<span foreground='blue'><b><big><big>Video-SES Secin:</big></big></b></span>" \
-     --form --separator='_' \
+     --form --separator='#' \
      --field="Video Dosya:FL" \
      --field="Ses Dosya:FL")
-VS=( "`cut -d_ -f1 <<<"$VS"`" "`cut -d_ -f2 <<<"$VS"`" )
+VS=( "`cut -d# -f1 <<<"$VS"`" "`cut -d# -f2 <<<"$VS"`" )
 # FFmpeg ile birleştirme işlemi. Çıktı log yönlendilir.
 # Log dosyası takip edilerek Yad bile bilgi yazdırılır.
 i=0
@@ -567,33 +563,27 @@ function mik() {
   bnpipe="/tmp/ses/X.pipe"
   if ! test -e "$bnpipe"; then mkfifo $bnpipe; fi
   exec 9<> $bnpipe
-
-  # Dil kodu girişi
   read -ra DiL< <(yad --window-icon="$HOME/.config/subses/subses.png" \
       --title="⟆υᑲ⟆∈⟆" --completion \
       --entry="Name:" ""  $(awk '{printf "\" %s \" ",$1}' "$HOME/.config/subses/dil.log")|\
       while read line; do EX=`echo $line|awk -F',' '{print $1}'`; echo "$EX"; done; sleep 0.1)
-
   # Tuş konbinasyonu için uygulanacak pencere seçimi.
   function pencere() {
   xdotool selectwindow getmouselocation --shell|awk -F= '/WINDOW/{printf $2 >"/tmp/ses/PX"}';
   }
   export -f pencere
-
   # Yad arayüzü kullanılarak pipeden veriler aktarılır.
   yad --text-info --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
       --height=600 --width=400 \
       --window-icon="$HOME/.config/subses/subses.png" \
       --wrap --button="SEÇİLEN PENCEYE DE YAZDIR":"bash -c "pencere"" \
       --wrap --button="SEÇİLEN PENCEYE YAZDIRMA":"rm -rf /tmp/ses/PX" \
-      --justify=center <&9 ||kill -9 `ps aux|awk '$12 ~ /--on-top/{printf "%s ",$2}'` &
-  SeS=$!
+      --justify=center <&9 ||kill -9 `ps aux|awk '$12 ~ /--on-top/{printf "%s ",$2}'` & SeS=$!
   # Yad arayüzü açık olduğu sürece çalışacak kod blok, mikrofon dinlenir google api kullanılarak metne çevrilir.
   until ! ps "$SeS" &> /dev/null; do
    yad --on-top --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
        --button="LÜTFEN KONUŞUN....":0 \
-       --window-icon="$HOME/.config/subses/subses.png" &
-   _yad=$!
+       --window-icon="$HOME/.config/subses/subses.png" & _yad=$!
    # Mikrofondan kayıt ve GOOGLE url yükleme ve çıktıyı alma.
    rec -q -r 16000 -b 16 -e signed-integer -p silence 1 0.50 0.1% 1 10:00 0.1% trim 0 4 |\
    sox -q -p '/tmp/ses/X.ogg' silence 1 0.50 0.1% 1 2.0 0.1% : newfile : restart || break >/dev/null
@@ -628,7 +618,6 @@ function tus() {
   xdotool selectwindow getmouselocation --shell|\
   awk -F= -v s="$1" '/WINDOW/{print "\n# "$2,s"\n" >>"/tmp/ses/kod"}'
   }
-
   # Tuş konbinasyon işleminin kayıt edilen foksiyon
   function klavye() {
   _depo+="$(xev|awk -F'[ )]+' '/^KeyPress/ { a[NR+2] } NR in a { printf "%s ",$8}')"
@@ -640,17 +629,14 @@ function tus() {
    fi
   done
   }
-
   # xterm ile tuş konbinasyon kontrol
   XTERM() {
   xterm -geometry 50x20-10+10 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/kod"'
   }
-
   # Foksiyonlar için export kullanımı
   export -f pencere
   export -f klavye
   export -f XTERM
-
   # uyg'nın arayüz kod blok
   yad --form --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
       --window-icon="$HOME/.config/subses/subses.png" \
@@ -694,27 +680,26 @@ function tus() {
 export -f dublaj
 export -f bilgi
 export -f indir
-export -f oynat
+export -f oyna
 export -f birles
 export -f mik
 export -f tus
 export -f bol
-
 # Pano içeriği kontrol edilir link ise aktarılır. Uyg için basit bir arayüz sağlanır.
 _url="`xclip -o -rmlastnl -selection clipboard|awk '/^http/'`"
 yad --form --title="⟆υᑲ⟆∈⟆  v1.6" --height=200 --width=400 \
     --window-icon="$HOME/.config/subses/subses.png" \
     --item-separator='!' --separator=' '\
-    --field="<span foreground='blue'><b><big><big>URL:</big></big></b></span>":TXT  "$_url" \
-    --field="Video ve Sub":CB                                                       'sub!video' \
-    --field="Video ekle:":SW                                                        'FALSE' \
-    --field="Video Dosyası":FL                                                      'ViDEO' \
-    --field='<b><big><big>Youtube URL Bilgi</big></big></b>!gtk-yes!popup':BTN      'bash -c "bilgi %2 %1"' \
-    --field='<b><big><big>URL veya Video OYNAT</big></big></b>!gtk-yes!popup':FBTN  'bash -c "oynat %1 %3 %4"' \
-    --field='<b><big><big>DUBLAJI BAŞLAT</big></big></b>!gtk-yes!popup':FBTN        'bash -c "dublaj"' \
-    --field='<b><big><big>İNDİRME MENU</big></big></b>!gtk-yes!popup':FBTN          'bash -c "indir %1"' \
-    --field='<b><big><big>TUŞ Konbinasyon </big></big></b>!gtk-yes!popup':FBTN      'bash -c "tus"' \
-    --field='<b><big><big>Mikrofon Dinle Yazdır</big></big></b>!gtk-yes!popup':FBTN 'bash -c "mik"' \
-    --field='<b><big><big>Video+Sub Böl</big></big></b>!gtk-yes!popup':FBTN         'bash -c "bol"' \
-    --field='<b><big><big>Video+Ses Birleştir</big></big></b>!gtk-yes!popup':FBTN   'bash -c "birles"' \
+    --field="<span foreground='blue'><b><big><big>URL:</big></big></b></span>":TXT "$_url"\
+    --field="Video ve Sub":CB                                                      'sub!video'\
+    --field="Video ekle:":SW                                                       'FALSE'\
+    --field="Video Dosyası":FL                                                     'ViDEO'\
+    --field='<b><big><big>Youtube Bilgi</big></big></b>!gtk-yes!popup':BTN         'bash -c "bilgi %2 %1"'\
+    --field='<b><big><big>Video OYNAT</big></big></b>!gtk-yes!popup':FBTN          'bash -c "oyna %1 %3 %4"'\
+    --field='<b><big><big>DUBLAJI BAŞLAT</big></big></b>!gtk-yes!popup':FBTN       'bash -c "dublaj"'\
+    --field='<b><big><big>iNDiRME MENU</big></big></b>!gtk-yes!popup':FBTN         'bash -c "indir %1"'\
+    --field='<b><big><big>TUŞ Konbinasyon </big></big></b>!gtk-yes!popup':FBTN     'bash -c "tus"'\
+    --field='<b><big><big>Mikrofon Dinle</big></big></b>!gtk-yes!popup':FBTN       'bash -c "mik"'\
+    --field='<b><big><big>Video+Sub Böl</big></big></b>!gtk-yes!popup':FBTN        'bash -c "bol"'\
+    --field='<b><big><big>Video+Ses Birleştir</big></big></b>!gtk-yes!popup':FBTN  'bash -c "birles"'\
     --button=ÇIKIŞ:0 >/dev/null
