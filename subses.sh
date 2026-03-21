@@ -96,9 +96,9 @@ done <'/tmp/ses/i.ini'
  # Yad ile veri girdisi kontrol edilerek işlem başlatılır.
  if read -r BiL< <(yad --form --title="𝕊𝕌𝔹𝕊𝔼𝕊" --separator='#' \
     --window-icon="$HOME/.config/subses/subses.png" \
-    --field="Altyazı Seç":FL "hata" \
-    --field='Sub Hızı' '1.5' \
-    --field="Sub Dil kodu: " 'tr' \
+    --field="Altyazı Seç":FL  "hata" \
+    --field='Sub Hızı'        '1.5' \
+    --field="Sub Dil kodu: "  'tr' \
     --field="KAPAT":SW "FALSE"); then
  echo -ne >'/tmp/ses/suB.log'
  [[ "${BiL/.*/}" =~ "#" ]] &&\
@@ -148,12 +148,13 @@ done <'/tmp/ses/i.ini'
     if (( "${#Q}" <= "200" )); then
      [[ "$Q" =~ ([A-Za-z]) ]] && mpv --no-terminal --speed="${BiL[1]}" \
      "https://translate.google.com/translate_tts?ie=UTF-8&tl=${BiL[2]}&client=tw-ob&q=${Q}" &
+     sleep 0.1
      if awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/suB.log'|sed -e 's/\s\{1,\}//'|grep '^\[.*\]' >/dev/null; then
       awk -F_ '/^'"${ZN[0]}"'/{print $2}' '/tmp/ses/suB.log'|sed -e 's/\s\{1,\}//'|grep '\[.*\]'|\
       awk -F']' -v z="${ZN[*]}" -v d="${BiL[2]}" -v t="${BiL[1]}" -v o="${OY[*]}" '{
           print z"\t\t"d"-"t"\t\t"o"\n"$1"]\n"$2}'|fmt -sw 90 >'/tmp/ses/xterm.log'
-    else
-     echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n`fmt -sw 90 <<<"$Q"`" >'/tmp/ses/xterm.log'
+     else
+      echo -e "${ZN[*]}\t\t${BiL[2]}-${BiL[1]}\t\t${OY[*]}\n`fmt -sw 90 <<<"$Q"`" >'/tmp/ses/xterm.log'
      fi
     else
      uzun "${BiL[2]}" "${BiL[1]}" "$Q" &
@@ -465,8 +466,8 @@ function bol() {
    read -r sub< <(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --form --item-separator='!' --separator='#' \
     --window-icon="$HOME/.config/subses/subses.png" \
-    --field="Video Seç":FL             "/*.mp4" \
-    --field="Altyazı Seç":FL           "/*.srt" \
+    --field="Video Seç":FL             "*.mp4" \
+    --field="Altyazı Seç":FL           "*.srt" \
     --field="Buraya kadar kes: "       '00:00:00') || exit 2
    sub=( "`cut -d# -f1 <<<"$sub"`" "`cut -d# -f2 <<<"$sub"`" "`cut -d# -f3 <<<"$sub"`" )
    xterm -geometry 80x10-10+300 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
