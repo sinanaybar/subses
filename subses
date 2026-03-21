@@ -97,7 +97,6 @@ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --height=100 --width=300 \
     --text="XEV uyg yüklü değil...";
 }
-
 # Ses dosya oluşturma yapıldığı için, çoklu çalışmalar da çakışmaya neden olabilir.
 if [[ "$(ps axu|awk '{if($11=="bash" && $12=="subses") print $2| "wc -l"}')" -ge 3 ]]; then
 yad --title="⟆υᑲ⟆∈⟆" \
@@ -110,7 +109,6 @@ Devam etmek istiyor musunuz ?" \
     --button=HAYIR:1 --button=EVET:0 --buttons-layout=center
 [ $? = 0 ] || exit 0
 fi
-
 if [[ "$1" =~ ^- ]]; then
   case $1 in
   -s)
@@ -684,6 +682,7 @@ if [[ "$1" =~ ^- ]]; then
    echo -ne "\r╏2/2╏ ${k_i}${y_K}`wc -l <'/tmp/ses/srt.sub'`${y_X}${r_X} ${y_K}➜${y_X} ${m_i}${y_K}${LT}${y_X}${r_X} ╏"
   done
   a=1
+  echo -ne >"${3/.*/}_.txt"
   # Ana işlem döngü, zaman değiştirme yapılır.
   while read -r X; do
   x="${X/*#/}"
@@ -708,23 +707,24 @@ if [[ "$1" =~ ^- ]]; then
      fi
     fi
    done
-   grep "`cut -d# -f1 <<<"$X"|cut -d' ' -f1`" "${3/.*/}_.txt" >/dev/null||\
+   grep "`cut -d# -f1 <<<"$X"|cut -d' ' -f1`" "${3/.*/}_.txt" 2>&1 >/dev/null||\
    awk -F# -v a="$a" '{print a"\n"$1"\n"$2"\n"}' <<<"${X}" >>"${3/.*/}_.txt"
   else
    Q="`awk -F":|,|-" '{printf "%s ",$1*60*60+$2*60+$3"."$4}' <<<"$X"`"
    for i in $2 ; do
     if (( "${#x}" >= "`cut -d- -f1 <<<"$i"`" && "${#x}" < "`cut -d- -f2 <<<"$i"`" )); then
      A="`echo "${Q[0]} ${i/*-/} +p"|dc`"
-     grep "`cut -d# -f1 <<<"$X"`" "${3/.*/}_.txt" >/dev/null||\
+     grep "`cut -d# -f1 <<<"$X"`" "${3/.*/}_.txt" 2>&1 >/dev/null||\
      printf "${a}\n`cut -d ' ' -f1 <<<"$X"` --> %02d:%02d:%02d,${A/*./}\n${x}\n\n"\
             "$((${A/.*/}/3600))" "$((${A/.*/}%3600/60))" "$((${A/.*/}%60))" >>"${3/.*/}_.txt"
      echo 1 >>"/tmp/ses/u/${i}"
      break
     fi
    done
-   grep "`cut -d# -f1 <<<"$X"|cut -d' ' -f1`" "${3/.*/}_.txt" >/dev/null||\
+   grep "`cut -d# -f1 <<<"$X"|cut -d' ' -f1`" "${3/.*/}_.txt" 2>&1 >/dev/null||\
    awk -F# -v a="$a" '{print a"\n"$1"\n"$2"\n"}' <<<"${X}" >>"${3/.*/}_.txt"
   fi
+  echo -ne "\r\t"
   echo -ne "\rDEĞiŞTi ╏$a╏ ${k_i}${y_K}`awk '{s+=$1}END{print s}' /tmp/ses/u/*`${y_X}${r_X} ${y_K}➜${y_X} ${m_i}${y_K}${LT}${y_X}${r_X} ╏"
   ((a++)) || true
   done <'/tmp/ses/srt.sub' 2>/dev/null
