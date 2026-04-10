@@ -120,7 +120,7 @@ done <'/tmp/ses/i.ini'
   awk -F: -v s="$(wc -l <"${BiL[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/M.log'
  strings '/tmp/ses/M.log'|while read -r oku; do
    _oku=( $oku )
-   MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-3))"'p' "${BiL[0]}"|tr [:space:] ' '`"
+   MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${BiL[0]}"|tr [:space:] ' '`"
    printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/suB.log'
    iX="$(grep -c "[0-9]_" '/tmp/ses/suB.log')"
    Y=$(("${iX}*100/${XX}*100"/100))
@@ -195,10 +195,12 @@ if [[ "${in[2]}" == 'ViDEO' ]]; then
  yt-dlp -f "$NO" -o "${in[5]}/%(title)s.%(ext)s" "${in[0]}" 2>&1|tee '/tmp/ses/yt-dlp.log' &
  knt="$!"
  until ! ps "$knt" >/dev/null; do
-  sleep 0.5
-  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  sleep 0.6
+  [[ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" > 0 ]] || {
   echo >'/tmp/ses/yt-X.log';
-  killall yt-dlp ; break ; }
+  killall yt-dlp ;
+  break ;
+  }
   read -ra BK< <(strings /tmp/ses/yt-dlp.log|grep -w "\[download\]"|tail -n1)
   if test "$(strings /tmp/ses/yt-dlp.log|grep -c "\[download\]")" -ge 4; then
    echo "${BK[1]/.*/}"
@@ -207,25 +209,28 @@ if [[ "${in[2]}" == 'ViDEO' ]]; then
    sleep 0.5
   fi
   if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
+   sleep 1
+   ps "$knt" &>/dev/null ||\
    yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
-       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|grep -w "ERROR:")
+       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|awk -F: '/^ERROR/{print $1,$2,$3}')
   fi
  done|yad --no-buttons --progress --title="𝕊𝕌𝔹𝕊𝔼𝕊" --width=400 \
           --window-icon="$HOME/.config/subses/subses.png" &
  until ! ps "$knt" >/dev/null; do sleep 1 ; done
  if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
+  sleep 1
+  ps "$knt" &>/dev/null ||\
   yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
-       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|grep -w "ERROR:")
+       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|awk -F: '/^ERROR/{print $1,$2,$3}')
  fi
  rm '/tmp/ses/yt-dlp.log' 2>/dev/null
  kill -9 `ps aux|awk '$12 ~ /--no-buttons/{printf "%s ",$2}'` 2>/dev/null
 elif [[ "${in[2]}" == 'SES' ]]; then
- nohup yt-dlp -x --audio-format mp3 \
-              -o "${in[5]}/%(title)s.%(ext)s" ${in[0]} >'/tmp/ses/yt-dlp.log' &
+ nohup yt-dlp -x --audio-format mp3 -o "${in[5]}/%(title)s.%(ext)s" ${in[0]} >'/tmp/ses/yt-dlp.log' &
  knt="$!"
  until ! ps "$knt" >/dev/null; do
   sleep 0.5
@@ -240,20 +245,24 @@ elif [[ "${in[2]}" == 'SES' ]]; then
    sleep 0.5
   fi
   if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
+   sleep 3
+   ps "$knt" &>/dev/null ||\
    yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
-       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|grep -w "ERROR:")
+       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|awk -F: '/^ERROR/{print $1,$2,$3}')
   fi
  done|yad --no-buttons --progress --title="𝕊𝕌𝔹𝕊𝔼𝕊" --width=400 \
           --window-icon="$HOME/.config/subses/subses.png" &
  until ! ps "$knt" >/dev/null; do sleep 1 ; done
  until ! pidof ffmpeg >/dev/null; do sleep 1 ; done
  if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
+  sleep 3
+  ps "$knt" &>/dev/null ||\
   yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
-       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|grep -w "ERROR:")
+       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|awk -F: '/^ERROR/{print $1,$2,$3}')
  fi
  rm '/tmp/ses/yt-dlp.log' 2>/dev/null
  kill -9 `ps aux|awk '$12 ~ /--no-buttons/{printf "%s ",$2}'` 2>/dev/null
@@ -282,14 +291,15 @@ elif [[ "${in[2]}" == 'OTO-SUB' ]]; then
 elif [[ "${in[2]}" == 'ViD+SES' ]]; then
  [[ "${in[3]}" == NO ]] && NO=mp4 || NO="${in[3]}"
  (
- nohup yt-dlp -x --audio-format mp3 \
-              -o "${in[5]}/%(title)s.%(ext)s" ${in[0]} >'/tmp/ses/yt-dlp.log' &
+ nohup yt-dlp -x --audio-format mp3 -o "${in[5]}/%(title)s.%(ext)s" ${in[0]} >'/tmp/ses/yt-dlp.log' &
  knt="$!"
  until ! ps "$knt" >/dev/null; do
   sleep 0.5
-  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  [[ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" > "0" ]] || {
   echo >'/tmp/ses/yt-X.log';
-  killall yt-dlp ; break ; }
+  killall yt-dlp ;
+  break ;
+  }
   read -ra BK< <(strings /tmp/ses/yt-dlp.log|grep -w "\[download\]"|tail -n1)
   if test "$(strings /tmp/ses/yt-dlp.log|grep -c "\[download\]")" -ge 4; then
    echo "${BK[1]/.*/}"
@@ -298,20 +308,24 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
    sleep 0.5
   fi
   if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
+   sleep 3
+   ps "$knt" &>/dev/null ||\
    yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
-       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|grep -w "ERROR:")
+       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|awk -F: '/^ERROR/{print $1,$2,$3}')
   fi
  done|yad --no-buttons --progress --title="𝕊𝕌𝔹𝕊𝔼𝕊" --width=400 \
           --window-icon="$HOME/.config/subses/subses.png" &
  until ! ps "$knt" >/dev/null; do sleep 1 ; done
  until ! pidof ffmpeg >/dev/null; do sleep 1 ; done
  if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
+  sleep 3
+  ps "$knt" &>/dev/null ||\
   yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
-       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|grep -w "ERROR:")
+       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|awk -F: '/^ERROR/{print $1,$2,$3}')
  fi
  )
  sleep 0.5
@@ -323,9 +337,11 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
  yt-dlp -f "$NO" -o "${in[5]}/%(title)s.mp4" "${in[0]}" 2>&1|tee '/tmp/ses/yt-dlp.log' &
  knt2="$!"
  until ! ps "$knt2" >/dev/null; do
-  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  [[ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" > "0" ]] || {
   echo >'/tmp/ses/yt-X.log';
-  killall yt-dlp ; break ; }
+  killall yt-dlp ;
+  break ;
+  }
   read -ra BK< <(strings /tmp/ses/yt-dlp.log|grep -w "\[download\]"|tail -n1)
   if test "$(strings /tmp/ses/yt-dlp.log|grep -c "\[download\]")" -ge 4; then
    echo "${BK[1]/.*/}"
@@ -334,10 +350,12 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
    sleep 0.5
   fi
   if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
+   sleep 3
+   ps "$knt2" &>/dev/null ||\
    yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
-       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|grep -w "ERROR:")
+       --justify=center< <(strings '/tmp/ses/yt-dlp.log'|awk -F: '/^ERROR/{print $1,$2,$3}')
   fi
  done|yad --no-buttons --progress --title="𝕊𝕌𝔹𝕊𝔼𝕊" --width=400 \
           --window-icon="$HOME/.config/subses/subses.png" &
@@ -356,14 +374,16 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
   echo "$i"
   echo "# $(iconv '/tmp/ses/ff.log'|awk '/frame/{print $6,$7,$9,$10|"tail -n1"}')"
   sleep 0.1
-  [ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" \> 0 ] || {
+  [[ "`ps aux|awk '$12 ~ /--no-buttons/{print $2|"wc -l"}'`" > "0" ]] || {
   echo >'/tmp/ses/yt-X.log';
-  killall ffmpeg ; break ; }
+  killall ffmpeg ;
+  break ;
+  }
   ((i++)) || true
- done|yad --no-buttons --progress --title="𝕊𝕌𝔹𝕊𝔼𝕊" --width=400 \
-     --pulsate \
-     --text="Video ve Ses Dosyaları birkleştiriliyor..." \
-     --window-icon="$HOME/.config/subses/subses.png" &
+ done|yad --no-buttons --progress --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+          --width=400 --pulsate \
+          --text="Video ve Ses Dosyaları birkleştiriliyor..." \
+          --window-icon="$HOME/.config/subses/subses.png" &
  until ! ps "$ff" >/dev/null; do sleep 1 ; done 2>/dev/null
  kill -9 `ps aux|awk '$12 ~ /--no-buttons/{printf "%s ",$2}'` 2>/dev/null
  )
@@ -589,7 +609,7 @@ function mik() {
    rec -q -r 16000 -b 16 -e signed-integer -p silence 1 0.50 0.1% 1 10:00 0.1% trim 0 4 |\
    sox -q -p '/tmp/ses/X.ogg' silence 1 0.50 0.1% 1 2.0 0.1% : newfile : restart || break >/dev/null
    kill -9 "$_yad" 2>/dev/null
-   if sox -q '/tmp/ses/X001.ogg' -r 16000 -c 1 -b 16 '/tmp/ses/x.flac'; then >/dev/null
+   if sox -q '/tmp/ses/X001.ogg' -r 16000 -c 1 -b 16 '/tmp/ses/x.flac' >/dev/null; then
     rm -rf '/tmp/ses/x.wav' 2>/dev/null
     MOZ='Mozilla/5.0'
     KEY='AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw'
