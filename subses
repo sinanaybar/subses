@@ -97,6 +97,7 @@ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --height=100 --width=300 \
     --text="XEV uyg yüklü değil...";
 }
+
 # Ses dosya oluşturma yapıldığı için, çoklu çalışmalar da çakışmaya neden olabilir.
 if [[ "$(ps axu|awk '{if($11=="bash" && $12=="subses") print $2| "wc -l"}')" -ge 3 ]]; then
 yad --title="⟆υᑲ⟆∈⟆" \
@@ -109,6 +110,8 @@ Devam etmek istiyor musunuz ?" \
     --button=HAYIR:1 --button=EVET:0 --buttons-layout=center
 [ $? = 0 ] || exit 0
 fi
+
+# UYG komut ana gövde
 if [[ "$1" =~ ^- ]]; then
   case $1 in
   -s)
@@ -121,7 +124,7 @@ if [[ "$1" =~ ^- ]]; then
                   -o -iname "sub.log" \
                   -o -iname "srt.log" \
                   -o -iname "bir.log" \
-                  -o -iname "XX.log" \
+                  -o -iname "Z_M.log" \
                   -o -iname "A.log" \
                   -o -iname "f1.txt" \) -exec rm -rf {} \;
   }
@@ -134,12 +137,11 @@ if [[ "$1" =~ ^- ]]; then
   echo -e "${k_i}${y_K}Altyazı adından '#' kaldırın..! ${y_X}${r_X}\n${2/.*/}";
   exit 2 ;
   }
-  if ! test "${2/*./}" == "srt"; then
-   play -q -n -c1 synth sin %-12 sin %-9 sin %-5 sin %-2 fade q 0.1 1 0.1
-   echo -e "Desteklenmeyen altyazı dosya...\nİşlem sonlandırılıp çıkış yapılıyor..."
-   TEMiZLE 2>/dev/null
-   exit 0
-  fi
+  [[ "${2/*./}" =~ "srt" ]] || {
+  echo -e "Desteklenmeyen altyazı dosya...\nİşlem sonlandırılıp çıkış yapılıyor...";
+  TEMiZLE 2>/dev/null ;
+  exit 0 ;
+  }
   trap TEMiZLE EXIT
   # Altyazı biçimlendirme düzenleme
   read -r TAM < <(echo "`grep -c "[0-9][0-9]:[0-9][0-9]:" "$2"` 2 * n"|dc)
@@ -151,7 +153,7 @@ if [[ "$1" =~ ^- ]]; then
   awk -F: -v s="$(wc -l <"$2")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/Z_M.log'
   strings '/tmp/ses/Z_M.log'|while read -r oku; do
     _oku=( $oku )
-    MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-3))"'p' "$2"|tr [:space:] ' '`"
+    MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "$2"|tr [:space:] ' '`"
     printf "%s#%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/sub.log'
     echo -ne "\r`wc -l <'/tmp/ses/sub.log'` > $TAM"
   done
@@ -159,14 +161,12 @@ if [[ "$1" =~ ^- ]]; then
     SN="$(awk -F: '{print $1*60*60+$2*60+$3}' <<<"$oku")"
     AL="$(awk -F# '/^'"$oku"'/{printf "%s ",$2}' '/tmp/ses/sub.log'\
     |sed -e 's/[[][^[]*]//g' -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//')"
-    [[ "$AL" =~ ([A-Za-z]) ]] && \
-    printf "%s#%s#%s\n" "${SN}" "${oku}" "${AL}" >>'/tmp/ses/srt.log'
+    [[ "$AL" =~ ([A-Za-z]) ]] && printf "%s#%s#%s\n" "${SN}" "${oku}" "${AL}" >>'/tmp/ses/srt.log'
     read -r EK< <(wc -l <'/tmp/ses/srt.log'|awk -v x="`grep -c "[0-9][0-9]:[0-9][0-9]:" "$2"`" '{print $1+x}')
     echo -ne "\r${EK} > ${TAM}"
   done
 
   # Elde edilen altyazı metin dosyası ile diğer girdiler dolar değerine atanır.
-  rm '/tmp/ses/Z_M.log'
   VX=( "/tmp/ses/srt.log" "${3/-*/}" "${3/*-/}" "$4" )
   echo -ne "\r\n"
   echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nViD: ${4/*\//}\nSUB: ${2/*\//}\nDiL: ${3/-*/}"
@@ -193,8 +193,12 @@ if [[ "$1" =~ ^- ]]; then
   done <'/tmp/ses/srt.log'
 
   # İlk başlangıç boşluk ses oluşturulur birleştirmek için log aktarılır.
-  sox -n -r 44100 '/tmp/ses/ff/0.mp3' trim 0.0 "$(head -n1 "${VX[0]}"|cut -d# -f1)".000
-  echo "file '/tmp/ses/ff/0.mp3' " >"/tmp/ses/ff/bir.log"
+  if (( "$(head -n1 "${VX[0]}"|cut -d# -f1)" >= 1 )); then
+   sox -n -r 44100 '/tmp/ses/ff/0.mp3' trim 0.0 "$(head -n1 "${VX[0]}"|cut -d# -f1)".000
+   echo "file '/tmp/ses/ff/0.mp3' " >"/tmp/ses/ff/bir.log"
+  else
+   echo -ne >"/tmp/ses/ff/bir.log"
+  fi
   perl -e 'open SX, "cut -d# -f2 '"${VX[0]}"'|" or die $_=qx(notify-send --icon=info "SRT OKUNAMADI");
   my @x1;
   my $i = 1;
@@ -207,27 +211,28 @@ if [[ "$1" =~ ^- ]]; then
      print $x4,"\t",$x2,".mp3\t$i\n";
      $i += 1;
     }
-  } print @x1,".mp3\t$i";' > "/tmp/ses/XX.log"
-  bb="$(grep -c 'mp3' <'/tmp/ses/XX.log')"
-  strings "/tmp/ses/XX.log"|while read -ra oku; do
+  } print @x1,".mp3\t$i";' > '/tmp/ses/Z_M.log'
+  bb="$(grep -c 'mp3' <'/tmp/ses/Z_M.log')"
+  strings '/tmp/ses/Z_M.log'|while read -ra oku; do
    # Ses dosyaların düzenleme ve birleştirme
-   if [[ "${#oku[@]}" -eq 3 ]]; then
+   if [[ "${#oku[@]}" == 3 ]]; then
     # Ses dosyası hızlandırılır. ff klosere aktarılır.
-    sox -q "/tmp/ses/${oku[1]}" '/tmp/ses/X.mp3' tempo "${VX[2]}" rate 44100 || exit 2
+    sox -q "/tmp/ses/${oku[1]}" '/tmp/ses/X.mp3' tempo "${VX[2]}" rate 44100
     # Ses zamanı alınır. Ara boşluk oluşturulur.
-    SES=$(soxi '/tmp/ses/X.mp3'|awk -F':|\\.' '/Duration/{printf "%d",$3*60+$4+0}')
-    sox -q -n -r 44100 '/tmp/ses/x.mp3' trim 0.0 "${oku[0]}".000 || exit 2
+    SES="$(soxi '/tmp/ses/X.mp3'|awk -F':|\\.' '/Duration/{print $4+0}')"
+    sox -q -n -r 44100 '/tmp/ses/x.mp3' trim 0.0 "${oku[0]}".000
 
     # Mevcut ses ile ara boşluğun uyumluluk kontrol edilir.
     # Değilse ses uyumlu hale gelecek şekilde kesilir.
-    if [[ "$SES" -le "${oku[0]}" ]]; then
+    if [[ "${SES}" < "${oku[0]}" ]]; then
      # Ses ile boşluk birleştirilir.
      sox -q -M '/tmp/ses/x.mp3' '/tmp/ses/X.mp3' "/tmp/ses/ff/${oku[2]}.mp3"
     else
-     sox -q -M '/tmp/ses/x.mp3' '/tmp/ses/X.mp3' "/tmp/ses/ff/${oku[2]}.mp3" trim 0 "${oku[0]}"
+     sox -q '/tmp/ses/X.mp3' '/tmp/ses/X.mp3' trim 0 "${oku[0]}".00 2>/dev/null
+     sox -q -M '/tmp/ses/x.mp3' '/tmp/ses/X.mp3' "/tmp/ses/ff/${oku[2]}.mp3"
      TM="`printf '%02d:%02d:%02d' \
      "$((${oku[1]/.*/}/3600%24))" "$((${oku[1]/.*/}/60%60))" "$((${oku[1]/.*/}%60))"`"
-     awk -F_ '/^'"$TM"'/{print $1"\n"$2"\n\n"}' '/tmp/ses/sub.log' >>'/tmp/ses/A.log'
+     awk -F# '/^'"$TM"'/{print $1"\n"$2"\n\n"}' '/tmp/ses/sub.log' >>'/tmp/ses/A.log'
     fi
     # İşlem sonunda oluşturulan fazlalık sesler silinir.
     rm -rf "/tmp/ses/x.mp3" "/tmp/ses/X.mp3" 2>/dev/null
@@ -243,7 +248,7 @@ if [[ "$1" =~ ^- ]]; then
     j="\e[1;3"${D:i++%${#D}:1}"m"
     echo -ne "\r${y_K}`du -hs '/tmp/ses/ff'|cut -f1`${y_X}${j}\
     ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
-   elif [[ "${#oku[@]}" -eq 2 ]]; then
+   else
     sox -q "/tmp/ses/${oku[0]}" "/tmp/ses/ff/${oku[1]}.mp3" tempo "${VX[2]}"
     echo "file '/tmp/ses/ff/${oku[1]}.mp3' " >>"/tmp/ses/ff/bir.log"
     echo
@@ -258,11 +263,11 @@ if [[ "$1" =~ ^- ]]; then
      bk=$?
      case $bk in
       1)
-      [[ -e '/tmp/ses/A.log' ]] && {
+      test -f '/tmp/ses/A.log' && {
       echo -ne "\rİşlem iptal: ${k_i}${y_K}Cancel${y_X}${r_X}\t\tDevam et: ${m_i}${y_K}OK${y_X}${r_X}";
       echo ;
       }
-      [[ -e '/tmp/ses/A.log' ]] && {
+      test -f '/tmp/ses/A.log' && {
       yad --text-info --title="HATA TOPLAM :   $(grep -c "[0-9][0-9]:" '/tmp/ses/A.log')" \
           --window-icon="$HOME/.config/subses/subses.png" \
           --height=400 --width=700 --wrap --justify=center< <(fmt -sw 80 '/tmp/ses/A.log')
@@ -315,8 +320,7 @@ if [[ "$1" =~ ^- ]]; then
   if test -z "$4"; then
    echo "İşlem başlatılıyor..." >'/tmp/ses/X/xterm.log'
    xterm -geometry 80x10-10+350 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/X/xterm.log"' &
-   XM=$!
-   set -- "-m" "$2" "$(xclip -o)" "$(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --window-icon="$HOME/.config/subses/subses.png" --file --save)"
+   set -- "-m" "$2" "$(xclip -o)" "$(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --window-icon="$HOME/.config/subses/subses.png" --file --save).mp3"
   fi
   echo -ne >'/tmp/ses/X/bir.txt'
   al="$(tr '.|?|!|,|:|;' '\n' <<<"$3"|awk NF|sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//')"
@@ -345,7 +349,7 @@ if [[ "$1" =~ ^- ]]; then
     j="\e[1;3"${D:i++%${#D}:1}"m"
     echo -ne "\r${y_K}`du -hs '/tmp/ses/X'|cut -f1`${y_X}${j}\
     ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
-    if ps "$XM" 2>/dev/null; then echo "${P}>${W} ╏${T}${E}╏${Y}%" >'/tmp/ses/X/xterm.log'; fi
+    pidof xterm >/dev/null && echo "${P}>${W} ╏${T}${E}╏${Y}%" >'/tmp/ses/X/xterm.log'
    fi
   done <<<"$al"
 
@@ -357,18 +361,15 @@ if [[ "$1" =~ ^- ]]; then
    ffmpeg -nostdin -loglevel quiet -f concat -safe 0 -i '/tmp/ses/X/bir.txt' -c:a copy "${A}" \
    && echo -ne "\r\n${m_i}${y_K}BİTTİ${y_X}${r_X}\n${y_K}${A}${y_X}\n"\
    || echo -e "\nHatalı işlem.."
-   if ps "$XM" 2>/dev/null; then echo "BİTTİ: ${A}" >'/tmp/ses/X/xterm.log'; fi
+   pidof xterm >/dev/null && echo "BİTTİ: ${A}" >'/tmp/ses/X/xterm.log'
   else
    # Hatalı işlem alınırsa yad ile bilgilendirilir.
-   if ps "$XM" 2>/dev/null; then
-    yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-        --window-icon="$HOME/.config/subses/subses.png" \
-        --height=10 --width=400 --dnd --text="Hatalı işlem sonu.."
-   else
-    echo -e "\r\n${k_i}${y_K}İŞLEM HATASI...! ${y_X}${r_X}"
-   fi
+   pidof xterm >/dev/null && yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+                                 --window-icon="$HOME/.config/subses/subses.png" \
+                                 --height=10 --width=400 --dnd --text="Hatalı işlem sonu.."
+   pidof xterm >/dev/null || echo -e "\r\n${k_i}${y_K}İŞLEM HATASI...! ${y_X}${r_X}"
   fi
-  if ps "$XM" 2>/dev/null; then kill -9 "$XM" 2>/dev/null; fi
+  pidof xterm >/dev/null && killall xterm >/dev/null
   cop 2>/dev/null
   ;;
   -c)
@@ -422,13 +423,12 @@ if [[ "$1" =~ ^- ]]; then
    awk -F: '{print $2":"$3":"$4,$1}' >'/tmp/ses/Z.log'
    grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}"|tail -n1|\
    awk -F: -v s="$(wc -l <"${sub[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/Z.log'
-   strings '/tmp/ses/Z.log'|while read -r oku; do
-    _oku=( $oku )
-    MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-3))"'p' "${sub[0]}"|tr [:space:] ' '`"
+   strings '/tmp/ses/Z.log'|while read -ra _oku; do
+    MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${sub[0]}"|tr "\n" ' '`"
     printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/Sub.log'
-    echo -ne "\r`wc -l <'/tmp/ses/Sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`"
+    echo -ne "\r`wc -l <'/tmp/ses/Sub.log'` ➜ `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`"
     if ps "$XM" &>/dev/null; then
-     echo "`wc -l <'/tmp/ses/Sub.log'` > `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`" >'/tmp/ses/xterm.log'
+     echo "`wc -l <'/tmp/ses/Sub.log'` ➜ `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`" >'/tmp/ses/xterm.log'
     fi
    done
    echo -ne "\r\n"
@@ -438,14 +438,13 @@ if [[ "$1" =~ ^- ]]; then
    i=0
    D="01234567"
    awk NF '/tmp/ses/Sub.log'|while read -r oku; do
-    if sed -e 's/([^)]*)//g' -e 's/\W/ /g' <<<"${oku/*_/}"|grep "[[:alnum:]]" >/dev/null
-    then
+    if sed -e 's/([^)]*)//g' -e 's/\W/ /g' <<<"${oku/*_/}"|grep "[[:alnum:]]" >/dev/null; then
      awk -F_ -v n="$w" '/^'"${oku/_*/}"'/{print n"\n"$1}' "${sub[0]}" >>"${yol}.${sub[1]}.txt"
     fi
     if [[ "${oku/*_/}" =~ ^\[ ]]; then
      mt="`awk -F']' '{print $1"\n"$2}' <<<"${oku/*_/}"|\
-     sed -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//'`"
-     if [ "$(wc -l <<<"$mt")" = 2 ]; then
+          sed -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//'`"
+     if [[ "$(wc -l <<<"$mt")" == 2 ]]; then
       mt1="`head -n1 <<<"$mt"`"
       mt2="`tail -n1 <<<"$mt"`"
       [[ "$mt1" =~ ([[:alnum:]]) ]] && wget -U "Mozilla/5.0" -q -O- \
@@ -587,7 +586,6 @@ if [[ "$1" =~ ^- ]]; then
    yad --notification --listen \
        --image="$HOME/.config/subses/subses.png"\
        --command="rm /tmp/ses/AT" & _yad="$!"
-
    sleep `tr -d - <<<"$2"` ## İstenilen bekleme süresi
 
   # Satır boyutu sınırlandırılır ve satır satır okunur.
@@ -665,10 +663,8 @@ if [[ "$1" =~ ^- ]]; then
   LT="`grep -o "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$3"|uniq|wc -l`"
   ( paste -- \
   <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "$3"|sed '$d') \
-  <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "$3"|sed '1d')|\
-  tr '\t' ':'|awk -F: '{print $1,$5}';
-  grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$3"|tail -n1|\
-  awk -F: -v s="$(wc -l <"$3")" '{print $1,s+1}'; )|\
+  <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "$3"|sed '1d')|tr '\t' ':'|awk -F: '{print $1,$5}';
+  grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$3"|tail -n1|awk -F: -v s="$(wc -l <"$3")" '{print $1,s+1}'; )|\
   while read -ra X; do
    MT="`sed -n ''"$((X[0]+1)),$((X[1]-3))"'p' "$3"|tr [:space:] ' '`"
    echo "`sed -n ''"${X[0]}"'p' "$3"`#$MT" >>'/tmp/ses/s.sub'
@@ -904,7 +900,7 @@ PAREMETRELER VE ÖRNEK KULLANIM:
 -m    Metin girdisini ses dosyası olarak kayıt işlemi yapılır.
       Uzun metni ses dosyası olarak kayıt edilir. İşlem yapılacak
       metin mouse ile seçilir veya kopyalanır.
-      Kaydedilecek yer ve ad istenir 'ses.mp3' gibi ve işlem başlar.
+      Kaydedilecek yer ve ad istenir 'ses' gibi ve işlem başlar.
       Tuş konbinasyonu ile çalıştırıldığında xterm ile bilgi verilir.
 
       subses -m tr
