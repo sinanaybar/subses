@@ -97,7 +97,6 @@ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
     --height=100 --width=300 \
     --text="XEV uyg yüklü değil...";
 }
-
 # Ses dosya oluşturma yapıldığı için, çoklu çalışmalar da çakışmaya neden olabilir.
 if [[ "$(ps axu|awk '{if($11=="bash" && $12=="subses") print $2| "wc -l"}')" -ge 3 ]]; then
 yad --title="⟆υᑲ⟆∈⟆" \
@@ -110,7 +109,6 @@ Devam etmek istiyor musunuz ?" \
     --button=HAYIR:1 --button=EVET:0 --buttons-layout=center
 [ $? = 0 ] || exit 0
 fi
-
 # UYG komut ana gövde
 if [[ "$1" =~ ^- ]]; then
   case $1 in
@@ -375,8 +373,7 @@ if [[ "$1" =~ ^- ]]; then
   -c)
   # İptal etme olasılığına karşın artık dosya temizleme.
   sil() {
-  rm "${yol}.${sub[1]}.txt" '/tmp/ses/sub.srt' '/tmp/ses/xterm.log' \
-  '/tmp/ses/Z.log' '/tmp/ses/Sub.log' 2>/dev/null
+  rm "${yol}.${sub[1]}.txt" '/tmp/ses/sub.srt' '/tmp/ses/xterm.log' '/tmp/ses/Z.log' '/tmp/ses/Sub.log' 2>/dev/null
   }
   # Altyazı varlığı kontrol ediliyor, yoksa yad kullanılarak kullanıcıdan istenir.
   if [[ "${3/*./}" == "srt" ]]; then
@@ -403,14 +400,12 @@ if [[ "$1" =~ ^- ]]; then
        --text="Altyazı adından '#' kaldırın.\n${sub/\#*/}";
    exit 2 ;
    }
-   yes|ffmpeg -nostdin -loglevel quiet -i "${sub/\#*/}" '/tmp/ses/sub.srt' >/dev/null\
-   || echo "SRT Format HATASI.."
+   yes|ffmpeg -nostdin -loglevel quiet -i "${sub/\#*/}" '/tmp/ses/sub.srt'||echo "SRT Format HATASI"
    sub=( "/tmp/ses/sub.srt" "`cut -d# -f2 <<<"${sub}"`" )
    echo -ne >"${yol}.${sub[1]}.txt"
    # Xterm ile bilgilendirme penceresi gösterimi.
    echo "İŞLEM BAŞLATILIYOR..." >'/tmp/ses/xterm.log'
    xterm -geometry 80x10-10+350 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
-   XM=$!
   fi
   trap sil EXIT
   if [[ -e '/tmp/ses/sub.srt' ]]; then
@@ -423,63 +418,34 @@ if [[ "$1" =~ ^- ]]; then
    awk -F: '{print $2":"$3":"$4,$1}' >'/tmp/ses/Z.log'
    grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}"|tail -n1|\
    awk -F: -v s="$(wc -l <"${sub[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/Z.log'
-   strings '/tmp/ses/Z.log'|while read -ra _oku; do
+   while read -ra _oku; do
     MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${sub[0]}"|tr "\n" ' '`"
     printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/Sub.log'
     echo -ne "\r`wc -l <'/tmp/ses/Sub.log'` ➜ `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`"
-    if ps "$XM" &>/dev/null; then
-     echo "`wc -l <'/tmp/ses/Sub.log'` ➜ `grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}"`" >'/tmp/ses/xterm.log'
-    fi
-   done
+    pidof xterm >/dev/null &&\
+    echo "`wc -l <'/tmp/ses/Sub.log'` ➜ `grep -c "^[0-9][0-9]:" "${sub[0]}"`" >'/tmp/ses/xterm.log'
+   done <'/tmp/ses/Z.log'
    echo -ne "\r\n"
    echo -ne "\r${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${dos}\nDiL: ${sub[1]}\n"
    # Düzenlenmiş altyazı metin dosyası gereksiz metinler çıkarılır ve GOOGLE URL kullanılarak çevrilir.
    w=1
    i=0
    D="01234567"
-   awk NF '/tmp/ses/Sub.log'|while read -r oku; do
-    if sed -e 's/([^)]*)//g' -e 's/\W/ /g' <<<"${oku/*_/}"|grep "[[:alnum:]]" >/dev/null; then
-     awk -F_ -v n="$w" '/^'"${oku/_*/}"'/{print n"\n"$1}' "${sub[0]}" >>"${yol}.${sub[1]}.txt"
-    fi
-    if [[ "${oku/*_/}" =~ ^\[ ]]; then
-     mt="`awk -F']' '{print $1"\n"$2}' <<<"${oku/*_/}"|\
-          sed -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//'`"
-     if [[ "$(wc -l <<<"$mt")" == 2 ]]; then
-      mt1="`head -n1 <<<"$mt"`"
-      mt2="`tail -n1 <<<"$mt"`"
-      [[ "$mt1" =~ ([[:alnum:]]) ]] && wget -U "Mozilla/5.0" -q -O- \
-      "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${sub[1]}&dt=t&q=${mt1}"\
-      |awk -F'"' '{print "[ "$2" ]\n"}'|fmt -sw 60 >>"${yol}.${sub[1]}.txt"
-      [[ "$mt2" =~ ([[:alnum:]]) ]] && wget -U "Mozilla/5.0" -q -O- \
-      "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${sub[1]}&dt=t&q=${mt2}"\
-      |awk -F'"' '{print $2}'|fmt -sw 60 >>"${yol}.${sub[1]}.txt"
-     else
-      [[ "$mt" =~ ([[:alnum:]]) ]] && wget -U "Mozilla/5.0" -q -O- \
-      "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${sub[1]}&dt=t&q=${mt}"\
-      |awk -F'"' '{print "[ "$2" ]"}'|fmt -sw 60 >>"${yol}.${sub[1]}.txt"
-     fi
+   while read -r oku; do
+    sed -e 's/([^)]*)//g' -e 's/\W/ /g' <<<"${oku/*_/}"|grep "[[:alnum:]]" >/dev/null &&\
+    awk -F_ -v n="$w" '/^'"${oku/_*/}"'/{print n"\n"$1}' "${sub[0]}" >>"${yol}.${sub[1]}.txt"
+    if (( "$(awk -F_ '{print length($2)}' <<<"${oku}")" < "200" )); then
+     X="`tr -d '"\r'  <<<"${oku/*_/}"`"
+     wget -U "Mozilla/5.0" -q -O- \
+    "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${sub[1]}&dt=t&q=${X}"\
+    |awk -F'"' '{print $2}'|fmt -w 80 >>"${yol}.${sub[1]}.txt"
     else
-     if grep '\[.*\]' <<<"${oku/*_/}" >/dev/null;then
-      mt="`awk -F'[' '{print $1"\n"$2}' <<<"${oku/*_/}"|\
-      sed -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//'`"
-      if [ "$(wc -l <<<"$mt")" = 2 ]; then
-       mt1="`head -n1 <<<"$mt"`"
-       mt2="`tail -n1 <<<"$mt"`"
-       [[ "$mt1" =~ ([[:alnum:]]) ]] && wget -U "Mozilla/5.0" -q -O- \
-       "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${sub[1]}&dt=t&q=${mt1}"\
-       |awk -F'"' '{print $2}'|fmt -sw 60 >>"${yol}.${sub[1]}.txt"
-       [[ "$mt2" =~ ([[:alnum:]]) ]] && wget -U "Mozilla/5.0" -q -O- \
-       "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${sub[1]}&dt=t&q=${mt2}"\
-       |awk -F'"' '{print "[ "$2" ]"}'|fmt -sw 60 >>"${yol}.${sub[1]}.txt"
-      fi
-     else
-      yaz="`sed -e 's/([^)]*)//g' -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s//' <<<"${oku/*_/}"`"
-      if [[ "$yaz" =~ ([[:alnum:]]) ]]; then
-       wget -U "Mozilla/5.0" -q -O- \
-       "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${sub[1]}&dt=t&q=${yaz,,}"\
-       |awk -F'"' '{print $2}'|fmt -sw 60 >>"${yol}.${sub[1]}.txt"
-      fi
-     fi
+     _DEPO+="$(tr -d '"\r'  <<<"${oku/*_/}"|tr '.|?|!|:|;|,' '\n'|fmt -w 190|while read -r Xi; do
+     wget -U "Mozilla/5.0" -q -O- \
+     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${sub[1]}&dt=t&q=${Xi}"\
+     |awk -F'"' '{print $2}'; done
+     )"
+     fmt -w 80 <<<"$_DEPO" >>"${yol}.${sub[1]}.txt"
     fi
     echo >>"${yol}.${sub[1]}.txt"
     son="$(grep -c '[0-9][0-9]:' "${yol}.${sub[1]}.txt")"
@@ -493,11 +459,9 @@ if [[ "$1" =~ ^- ]]; then
     j="\e[1;3"${D:i++%${#D}:1}"m"
     echo -ne "\r${y_K}${bak}${y_X}${j}\
     ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y} %${y_X}${r_X}"
-    if ps "$XM" &>/dev/null; then
-     echo "${bak} ╏${T}${E}╏${Y}%" >'/tmp/ses/xterm.log'
-    fi 2>/dev/null
+    pidof xterm >/dev/null && echo "${bak} ╏${T}${E}╏${Y}%" >'/tmp/ses/xterm.log'
     ((w++)) || true
-   done && {
+   done <'/tmp/ses/Sub.log' && {
    ffmpeg -nostdin -loglevel quiet -i "${yol}.${sub[1]}.txt" "${yol}.${sub[1]}.srt" \
    && ( echo -e "TAMAMLANDI: \n '${yol}.${sub[1]}.srt' \n" >'/tmp/ses/xterm.log';
    echo -ne "\r\n${m_i}${y_K}TAMAMLANDI:${y_X}${r_X}\n${y_K}'${yol}.${sub[1]}.srt'${y_X}\n"; )\
@@ -505,12 +469,12 @@ if [[ "$1" =~ ^- ]]; then
    echo "SRT FORMAT HATASI....!" >'/tmp/ses/xterm.log'; )
    }
   else
-   if ps "$XM" &>/dev/null; then echo "SRT FORMAT HATASI....!" >'/tmp/ses/xterm.log'; fi
+   pidof xterm >/dev/null && echo "SRT FORMAT HATASI....!" >'/tmp/ses/xterm.log'
    sleep 2
    echo "SRT Formatını Kontrol edin ve tekrardan deneyin...!"
   fi
   # Xterm çalışıyorsa kapatalım.
-  if ps "$XM" &>/dev/null; then kill -9 "$XM" &>/dev/null; fi
+  pidof xterm >/dev/null && killall xterm >/dev/null
   sil
   ;;
   -z)
@@ -590,7 +554,7 @@ if [[ "$1" =~ ^- ]]; then
 
   # Satır boyutu sınırlandırılır ve satır satır okunur.
    tr '.|?|!|:|;|,' '\n' <<<"${5:-$(xclip -o)}"|awk NF|while read -r oku; do
-    YZ="$(sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//' <<<"$oku")"
+    YZ="$(sed -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//' <<<"$oku"|tr -d '"')"
     wget -U "Mozilla/5.0" -q -O- \
     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$3&dt=t&q=${YZ,,}"\
     |awk -F'"' '{print $2}'
@@ -629,26 +593,51 @@ if [[ "$1" =~ ^- ]]; then
   -t)
   # 3.cü değer kontrol edilir, mevcut ise alınır yoksa panodan aktarılır.
   if [[ "$3" == "X" ]]; then
-   _DEPO+="$(tr '.|?|!|:|;|,' '\n' <<<"$(xclip -o)"|while read -r oku; do
-   wget -U "Mozilla/5.0" -q -O- \
-   "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${oku}"\
-   |awk -F'"' '{print $2}'; done
+   _DEPO+="$(tr -d '"\r'  <<<"$(xclip -o)"|tr '.|?|!|:|;|,' '\n'|while read -r oku; do
+    if (( "${#oku}" < 200 )); then
+     wget -U "Mozilla/5.0" -q -O- \
+     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${oku}"\
+     |awk -F'"' '{print $2}'
+    else
+     fmt -w 150 <<<"$oku"|while read -r X; do
+      wget -U "Mozilla/5.0" -q -O- \
+      "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${X}"\
+      |awk -F'"' '{print $2}'
+     done
+    fi
+   done
    )"
    echo -ne "$_DEPO"|xclip -sel c && notify-send --icon="$HOME/.config/subses/subses.png" "KOPYALANDI"\
    ||notify-send --icon="$HOME/.config/subses/subses.png" "HATALI İŞLEM SONU..."
   elif [[ -z "$3" ]]; then
    # Borulama ile alınan metinler
-   awk NF|tr '.|?|!|:|;|,' '\n'|while read -r oku; do
-    wget -U "Mozilla/5.0" -q -O- \
-    "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${oku}"\
-    |awk -F'"' '{print $2}'
+   awk NF|tr -d '"\r'|tr '.|?|!|:|;|,' '\n'|while read -r oku; do
+    if (( "${#oku}" < 200 )); then
+     wget -U "Mozilla/5.0" -q -O- \
+     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${oku}"\
+     |awk -F'"' '{print $2}'
+    else
+     fmt -w 150 <<<"$oku"|while read -r X; do
+      wget -U "Mozilla/5.0" -q -O- \
+      "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${X}"\
+      |awk -F'"' '{print $2}'
+     done
+    fi
    done
   elif [[ -n "$3" ]]; then
    # Direk girilen metinler.
-   tr '.|?|!|:|;|,' '\n' <<<"$3"|tr '.' '\n'|while read -r OKU; do
-    wget -U "Mozilla/5.0" -q -O- \
-    "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${OKU}"\
-    |awk -F'"' '{print $2}'
+   tr -d '"\r' <<<"$3"|tr '.|?|!|:|;|,' '\n'|while read -r oku; do
+    if (( "${#oku}" < 200 )); then
+     wget -U "Mozilla/5.0" -q -O- \
+     "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${oku}"\
+     |awk -F'"' '{print $2}'
+    else
+     fmt -w 150 <<<"$oku"|while read -r X; do
+      wget -U "Mozilla/5.0" -q -O- \
+      "http://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${2:-tr}&dt=t&q=${X}"\
+      |awk -F'"' '{print $2}'
+     done
+    fi
    done
   fi
   ;;
