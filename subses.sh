@@ -64,6 +64,7 @@ yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
      --height=100 --width=300 \
      --text="Gerekli Dosyalar Konumda Değil..!\n$HOME/.config/subses/dil.log";
 }
+
 # Dublajlı olarak seslendirme işlem.
 function dublaj() {
 # Mevcut sınırı geçen altyazıları parçalı olarak okuma işlemi
@@ -75,6 +76,29 @@ while read -r oku; do
  "https://translate.google.com/translate_tts?ie=UTF-8&tl=${1}&client=tw-ob&q=${oku}"
 done <'/tmp/ses/i.ini'
 }
+# Üst üste binen seslendirme de video duraklatma
+function dur() {
+head -n90 '/tmp/ses/mpv'|grep "^_UiD" || {
+yad --on-top --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+    --window-icon="$HOME/.config/subses/subses.png" \
+    --height=100 --width=300 --text="MPV Penceresi seçilmediği için duraklatma yapılmayacak.";
+}
+head -n90 '/tmp/ses/mpv'|grep "^_UiD" &&\
+while ps axu|awk '$11=="mpv" && /--no-terminal/{print $2}'|grep "[0-9]" >/dev/null; do
+ tail -n1 '/tmp/ses/mpv'|grep "Paused" >/dev/null ||\
+ xdotool windowactivate --sync "`head -n90 '/tmp/ses/mpv'|awk '/^_UiD/{printf $2}'`" key space
+ sleep 0.1
+done 2>/dev/null
+tail -n1 '/tmp/ses/mpv'|grep "Paused" >/dev/null &&\
+xdotool windowactivate --sync "`head -n90 '/tmp/ses/mpv'|awk '/^_UiD/{printf $2}'`" key space
+}
+# Duraklatma işlemi için seçilen mpv penceresi
+function mpv_P() {
+xdotool selectwindow getmouselocation --shell|\
+awk -F= -v s="$1" '/WINDOW/{print "\n_UiD "$2,s"\n" >>"/tmp/ses/mpv"}'
+}
+export -f mpv_P
+
  # Mpv çalıyor mu diye kontrol edilir.
  if pidof mpv >/dev/null; then
   echo -ne "İŞLEM BAŞLATILIYOR..." >'/tmp/ses/xterm.log'
@@ -99,14 +123,16 @@ done <'/tmp/ses/i.ini'
     --field="Altyazı Seç":FL  "hata" \
     --field='Sub Hızı'        '1.5' \
     --field="Sub Dil kodu: "  'tr' \
-    --field="KAPAT":SW "FALSE"); then
+    --field="KAPAT":SW "FALSE" \
+    --field="V-DUR":SW "FALSE" \
+    --field='MPV Penceresi!gtk-yes!popup':FBTN 'bash -c "mpv_P"'); then
  echo -ne >'/tmp/ses/suB.log'
  [[ "${BiL/.*/}" =~ "#" ]] &&\
  yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
      --window-icon="$HOME/.config/subses/subses.png" \
      --height=100 --width=300 \
      --text="Altyazı adından # kaldırın."
- BiL=( "`cut -d# -f1 <<<"$BiL"`" "`cut -d# -f2 <<<"$BiL"`" "`cut -d# -f3 <<<"$BiL"`" "`cut -d# -f4 <<<"$BiL"`" )
+ BiL=( "`cut -d# -f1 <<<"$BiL"`" "`cut -d# -f2 <<<"$BiL"`" "`cut -d# -f3 <<<"$BiL"`" "`cut -d# -f4 <<<"$BiL"`" "`cut -d# -f5 <<<"$BiL"`" )
  # xterm bilgi verilmek için başlatılır.
  xterm -geometry 80x10-10+300 -fa -hold -T '𝕊𝕌𝔹𝕊𝔼𝕊' -e 'bash -c "watch -n1 cat /tmp/ses/xterm.log"' &
  XM=$!
@@ -120,7 +146,7 @@ done <'/tmp/ses/i.ini'
   awk -F: -v s="$(wc -l <"${BiL[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/M.log'
  strings '/tmp/ses/M.log'|while read -r oku; do
    _oku=( $oku )
-   MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${BiL[0]}"|tr [:space:] ' '`"
+   MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${BiL[0]}"|tr "\n" ' '`"
    printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/suB.log'
    iX="$(grep -c "[0-9]_" '/tmp/ses/suB.log')"
    Y=$(("${iX}*100/${XX}*100"/100))
@@ -146,6 +172,9 @@ done <'/tmp/ses/i.ini'
    fi
    if ! strings '/tmp/ses/mpv'|tail -n1|grep -w '^(Paused)' >/dev/null; then
     if (( "${#Q}" <= "200" )); then
+     # Mpv duraklatma için test işlem
+     [[ "${BiL[4]}" =~ "TRUE" ]] && dur
+     #girdi metin içeriyorsa mpv ile okuma yapılır.
      [[ "$Q" =~ ([A-Za-z]) ]] && mpv --no-terminal --speed="${BiL[1]}" \
      "https://translate.google.com/translate_tts?ie=UTF-8&tl=${BiL[2]}&client=tw-ob&q=${Q}" &
      sleep 0.1
@@ -209,8 +238,7 @@ if [[ "${in[2]}" == 'ViDEO' ]]; then
    sleep 0.5
   fi
   if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
-   sleep 1
-   ps "$knt" &>/dev/null ||\
+   [[ "`awk '/^ERROR/{print length($0)}' '/tmp/ses/yt-dlp.log'`" > "9" ]] &&\
    yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
@@ -220,8 +248,7 @@ if [[ "${in[2]}" == 'ViDEO' ]]; then
           --window-icon="$HOME/.config/subses/subses.png" &
  until ! ps "$knt" >/dev/null; do sleep 1 ; done
  if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
-  sleep 1
-  ps "$knt" &>/dev/null ||\
+  [[ "`awk '/^ERROR/{print length($0)}' '/tmp/ses/yt-dlp.log'`" > "9" ]] &&\
   yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
@@ -245,8 +272,7 @@ elif [[ "${in[2]}" == 'SES' ]]; then
    sleep 0.5
   fi
   if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
-   sleep 3
-   ps "$knt" &>/dev/null ||\
+   [[ "`awk '/^ERROR/{print length($0)}' '/tmp/ses/yt-dlp.log'`" > "9" ]] &&\
    yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
@@ -257,8 +283,7 @@ elif [[ "${in[2]}" == 'SES' ]]; then
  until ! ps "$knt" >/dev/null; do sleep 1 ; done
  until ! pidof ffmpeg >/dev/null; do sleep 1 ; done
  if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
-  sleep 3
-  ps "$knt" &>/dev/null ||\
+  [[ "`awk '/^ERROR/{print length($0)}' '/tmp/ses/yt-dlp.log'`" > "9" ]] &&\
   yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
@@ -308,8 +333,7 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
    sleep 0.5
   fi
   if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
-   sleep 3
-   ps "$knt" &>/dev/null ||\
+   [[ "`awk '/^ERROR/{print length($0)}' '/tmp/ses/yt-dlp.log'`" > "9" ]] &&\
    yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
@@ -320,8 +344,7 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
  until ! ps "$knt" >/dev/null; do sleep 1 ; done
  until ! pidof ffmpeg >/dev/null; do sleep 1 ; done
  if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
-  sleep 3
-  ps "$knt" &>/dev/null ||\
+  [[ "`awk '/^ERROR/{print length($0)}' '/tmp/ses/yt-dlp.log'`" > "9" ]] &&\
   yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
@@ -350,8 +373,7 @@ elif [[ "${in[2]}" == 'ViD+SES' ]]; then
    sleep 0.5
   fi
   if grep -w 'ERROR:' '/tmp/ses/yt-dlp.log' >/dev/null; then
-   sleep 3
-   ps "$knt2" &>/dev/null ||\
+   [[ "`awk '/^ERROR/{print length($0)}' '/tmp/ses/yt-dlp.log'`" > "9" ]] &&\
    yad --text-info --title="YT-DLP HATALI ÇIKTI VERİLERİ" \
        --window-icon="$HOME/.config/subses/subses.png" \
        --height=200 --width=500 --wrap \
@@ -417,7 +439,7 @@ esac
 # Mpv çıktısı yönlendilir. Hatalı çıktısı yazdırılır.
 function oyna() {
 [[ "$2" =~ FALSE ]] && url="$1" || url="$3"
-if nohup  mpv --pause --cache-pause-initial=yes --autofit=100%x480 "$url" >'/tmp/ses/mpv'; then
+if nohup  mpv --pause --cache-pause-initial=yes --autofit=100%x480 "$url" >>'/tmp/ses/mpv'; then
  rm -rf '/tmp/ses/mpv' '/tmp/ses/suB.log' '/tmp/ses/i.in' '/tmp/ses/xterm.log' 2>/dev/null
 else
  yad --on-top --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
