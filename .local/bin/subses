@@ -1,0 +1,1360 @@
+#!/usr/bin/env bash
+
+## SUBSES çalışken farklı bir işlem başlatmayın, srt biçimlerine dikkat edin.
+## SRT aralıkların 1 sn'den az veya aynı zaman olursa altyazılar birleştirilip okunacak.
+## Altyazı karekter sayısı ile zaman aralığı uygun olmalıdır, yoksa sesler kesilecektir.
+## Gerekli şartlar karşılandığında Manjaro xfce4 da sorunsuz çalışmaktadır.
+## Diğer dağıtımlarda deneme yapmadığım için düzenleme yapmak gerekli olabilir.
+## https://github.com/sinanaybar/subses
+## sinanaybar@yandex.com
+## https://www.youtube.com/watch?v=MJqDyuQW59E
+## YÜKLÜ OLDUĞUNDAN EMİN OLUN: Yardımcı uygulamarın kurulu değilse kurun.
+## Wayland.) ffmpeg _ mpv _ yad _ wl-paste _ wtype _ sox _ socat _ jq _ tesseract
+## X11.) ffmpeg _ mpv _ yad _ xclip _ sox _ socat _ tesserac
+
+SUBSES="
+--------------------------------------
+██████████████████████████████████████
+█─▄▄▄▄█▄─██─▄█▄─▄─▀█─▄▄▄▄█▄─▄▄─█─▄▄▄▄█
+█▄▄▄▄─██─██─███─▄─▀█▄▄▄▄─██─▄█▀█▄▄▄▄─█
+▀▄▄▄▄▄▀▀▄▄▄▄▀▀▄▄▄▄▀▀▄▄▄▄▄▀▄▄▄▄▄▀▄▄▄▄▄▀
+--------------------------------------
+"
+
+# --- Ortak ayarlar ---
+# Yazdırma işlemi özelleştirmek için değerler atıyoruz.
+y_K="$(tput bold)"
+y_X="$(tput sgr0)"
+k_i='\e[1;31m'
+y_l="\e[1;32m"
+s_i="\e[1;33m"
+m_i='\e[1;34m'
+m_r='\e[1;35m'
+r_X="\e[0m"
+
+SES_DIR="/tmp/ses/X"
+LOCK_FILE="/tmp/ses/subses.lock"
+MAX_PARALLEL=5     # Aynı anda kaç indirme yapılacağı
+CHUNK_LIMIT=190    # Google TTS'e gönderilecek tek parçanın maksimum karakteri
+[[ ! -d "/tmp/ses" ]] && mkdir -p "/tmp/ses"
+if [[ "$XDG_SESSION_TYPE" == "x11" ]]; then
+  PANO_ARAC="xclip"
+else
+  export GDK_BACKEND=wayland
+  PANO_ARAC="wl-paste"
+fi
+
+# Gerekli yardımcı uyg kontrol işlemi.
+gereksinim_kontrol() {
+  local eksik=()
+  local cmd
+
+  # Basit komut adı == görüntü adı olan, oturumdan bağımsız araçlar
+  for cmd in curl wget ffmpeg yad flock perl sox tesseract mpv socat yt-dlp jq pgrep; do
+    command -v "$cmd" >/dev/null 2>&1 || eksik+=("$cmd")
+  done
+
+  command -v "$PANO_ARAC" >/dev/null 2>&1 || eksik+=("$PANO_ARAC")
+
+  # wtype - spectacle sadece wayland altında, ydotool'a ek olarak gerekiyor.
+  if [[ "$XDG_SESSION_TYPE" != "x11" ]]; then
+    command -v wtype >/dev/null 2>&1 || eksik+=("wtype")
+    command -v spectacle >/dev/null 2>&1 || eksik+=("spectacle")
+  else
+    command -v magick >/dev/null 2>&1 || eksik+=("magick")
+    command -v import >/dev/null 2>&1 || eksik+=("import")
+  fi
+
+  command -v subses >/dev/null 2>&1 || eksik+=("subses (PATH içinde bulunamadı)")
+
+  test -f "$HOME/.local/bin/subses" || eksik+=("$HOME/.local/bin/subses")
+  test -f "$HOME/.local/bin/subses.sh" || eksik+=("$HOME/.local/bin/subses.sh")
+  test -f "$HOME/.local/bin/VSub.py" || eksik+=("$HOME/.local/bin/VSub.py")
+  test -f "$HOME/.local/bin/VSub.sh" || eksik+=("$HOME/.local/bin/VSub.sh")
+  test -f "$HOME/.local/bin/youtube-subses" || eksik+=("$HOME/.local/bin/youtube-subses")
+  test -f "$HOME/.local/lib/subses-app/subses.png" || eksik+=("$HOME/.local/lib/subses-app/subses.png")
+  test -f "$HOME/.local/lib/subses-app/dil.log" || eksik+=("$HOME/.local/lib/subses-app/dil.log")
+  test -f "$HOME/.local/lib/subses-app/local_server.py" || eksik+=("$HOME/.local/lib/subses-app/local_server.py")
+  test -f "$HOME/.local/lib/subses-app/subses_core.sh" || eksik+=("$HOME/.local/lib/subses-app/subses_core.sh")
+  test -f "$HOME/.local/lib/subses-app/youtube-subses-ext.sh" || eksik+=("$HOME/.local/lib/subses-app/youtube-subses-ext.sh")
+
+  if (( ${#eksik[@]} > 0 )); then
+    local liste
+    liste="$(printf '  • %s\n' "${eksik[@]}")"
+    echo -e "${k_i}${y_K}Eksik bağımlılık/dosya(lar):${y_X}${r_X}\n${liste}" >&2
+    echo "Kurulum örneği: sudo pacman -S ${eksik[*]}" >&2
+    if command -v yad >/dev/null 2>&1; then
+      yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+          --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+          --height=220 --width=420 \
+          --text="Eksik bağımlılık / dosya(lar):\n\n${liste}"
+    fi
+    return 1
+  fi
+}
+gereksinim_kontrol || exit 1
+pano_oku() {
+  if [[ "$PANO_ARAC" == "xclip" ]]; then
+    xclip -o 2>/dev/null
+  else
+    wl-paste 2>/dev/null
+  fi
+}
+pano_yaz() {
+  if [[ "$PANO_ARAC" == "xclip" ]]; then
+    xclip -sel c
+  else
+    wl-copy
+  fi
+}
+metni_parcala() {
+  local metin="$1" limit="${2:-200}"
+  tr -d '"\r' <<<"$metin" | tr '.|?|!|:|;|,' '\n' | awk NF | while read -r oku; do
+    if (( ${#oku} < limit )); then
+      printf '%s\n' "$oku"
+    else
+      fmt -w 150 <<<"$oku"
+    fi
+  done
+}
+ceviri_al() {
+  local idx="$1" metin_parca="$2" hedef_dil="$3" dizin="$4"
+  local hedef deneme=0
+  hedef="$dizin/$(printf '%05d' "$idx").txt"
+  while (( deneme < 3 )); do
+    wget -U "Mozilla/5.0" -q -T 15 --tries=1 -O- \
+      "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${hedef_dil}&dt=t&q=${metin_parca}" \
+      2>/dev/null | awk -F'"' '{print $2}' >"$hedef"
+    [[ -s "$hedef" ]] && return 0
+    (( deneme++ ))
+  done
+  notify-send -u critical "Çeviri başarısız" "Parça $idx 3 denemede de alınamadı" \
+    --icon="$HOME/.local/lib/subses-app/subses.png"
+  return 1
+}
+export -f ceviri_al
+paralel_cevir() {
+  local dil="$1"; shift
+  local -a parcalar=("$@")
+  local n="${#parcalar[@]}"
+  (( n == 0 )) && return 0
+
+  local tmp
+  tmp="$(mktemp -d /tmp/ses/cev.XXXXXX)" || return 1
+
+  local i idx pids=()
+  for (( i=0; i<n; i++ )); do
+    idx=$((i+1))
+    ceviri_al "$idx" "${parcalar[$i]}" "$dil" "$tmp" &
+    pids+=("$!")
+    if (( ${#pids[@]} >= MAX_PARALLEL )); then
+      wait "${pids[0]}" 2>/dev/null
+      pids=("${pids[@]:1}")
+    fi
+  done
+  for p in "${pids[@]}"; do wait "$p" 2>/dev/null; done
+
+  for (( i=1; i<=n; i++ )); do
+    cat "$tmp/$(printf '%05d' "$i").txt" 2>/dev/null
+  done
+  rm -rf "$tmp"
+}
+export -f paralel_cevir
+
+# UYG komut ana gövde
+if [[ "$1" =~ ^- ]]; then
+  case $1 in
+  -s)
+  set -e -o pipefail
+  WORKDIR="$(mktemp -d /tmp/ses.XXXXXX)"
+  mkdir -p "$WORKDIR/ff"
+  find /tmp -maxdepth 1 -type d -name 'ses.??????' -mmin +1440 -exec rm -rf {} + 2>/dev/null || true
+  TEMiZLE() { rm -rf "$WORKDIR"; }
+  hata_yakala() {
+    echo "❌ HATA: Betik beklenmedik bir şekilde sonlandırıldı!"
+    echo "📍 Hata satırı: $1"
+    echo "💻 Son çalıştırılan komut: $2"
+  }
+  trap 'hata_yakala $LINENO "$BASH_COMMAND"' ERR
+  trap TEMiZLE EXIT
+
+  g2="`pwd`/$2"
+  g4="`pwd`/$4"
+  set -- "$1" "`dirname "$g2"`/`basename "$g2"`" "$3" "`dirname "$g4"`/`basename "$g4"`"
+
+  [[ "${2/.*/}" =~ "#" ]] && {
+    echo -e "${k_i}${y_K}Altyazı adından '#' kaldırın..! ${y_X}${r_X}\n${2/.*/}"
+    exit 2
+  }
+  [[ "${2/*./}" =~ "srt" ]] || {
+    echo -e "Desteklenmeyen altyazı dosya...\nİşlem sonlandırılıp çıkış yapılıyor..."
+    exit 0
+  }
+  cubuk_olustur() {
+    local ch="$1" n="$2" s
+    printf -v s '%*s' "$n" ''
+    printf -v "$3" '%s' "${s// /$ch}"
+  }
+  BOYUT_TOPLAM=0
+  boyut_ekle() {
+    local b
+    b="$(stat -c%s "$1" 2>/dev/null || echo 0)"
+    BOYUT_TOPLAM=$((BOYUT_TOPLAM + b))
+  }
+  boyut_okunabilir() {
+    awk -v b="$BOYUT_TOPLAM" 'BEGIN{
+      split("B K M G", u); i=1
+      while (b>=1024 && i<4) { b/=1024; i++ }
+      printf "%.1f%s", b, u[i]
+    }'
+  }
+  SRT_SATIR="$(grep -c "[0-9][0-9]:[0-9][0-9]:" "$2")"
+  paste -- \
+    <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$2"|sed '$d') \
+    <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$2"|sed '1d')|\
+    awk -F: '{print $2":"$3":"$4,$1}' >"$WORKDIR/Z_M.log"
+  grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$2"|tail -n1|\
+    awk -F: -v s="$(wc -l <"$2")" '{print $2":"$3":"$4"\t"s+1,$1}' >>"$WORKDIR/Z_M.log"
+  i=0
+  while read -r oku; do
+    ((i++)) || true
+    _oku=( $oku )
+    MT="`sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "$2"|tr '[:space:]' ' '`"
+    printf "%s#%s\n" "${_oku[0]}" "$MT" >>"$WORKDIR/sub.log"
+    echo -ne "\r${i} > ${SRT_SATIR}"
+  done <"$WORKDIR/Z_M.log"
+  awk -F'#' '
+    {
+      key = $1
+      text = $2
+      gsub(/\[[^]]*\]/, "", text)
+      gsub(/\([^)]*\)/, "", text)
+      gsub(/[^[:alnum:] \t]/, " ", text)
+      gsub(/[ \t]+/, " ", text)
+      sub(/^ /, "", text)
+      if (!(key in seen)) { order[++n] = key; seen[key] = 1 }
+      grouped[key] = grouped[key] text " "
+    }
+    END {
+      for (k = 1; k <= n; k++) {
+        key = order[k]
+        al = grouped[key]
+        if (al ~ /[A-Za-z]/) {
+          split(key, t, ":")
+          sn = t[1]*3600 + t[2]*60 + t[3]
+          print sn "#" key "#" al
+        }
+      }
+    }
+  ' "$WORKDIR/sub.log" > "$WORKDIR/srt.log"
+
+  VX=( "$WORKDIR/srt.log" "${3/-*/}" "${3/*-/}" "$4" )
+  echo -ne "\r\n"
+  echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nViD: ${4/*\//}\nSUB: ${2/*\//}\nDiL: ${3/-*/}"
+
+  i=0
+  aa=0
+  D=01234567
+  bb="$(grep -c '[0-9][0-9]:[0-9]' "${VX[0]}")"
+  while read -r oku; do
+    SN="$(cut -d# -f1 <<<"$oku")"
+    YZ="$(cut -d# -f3 <<<"$oku")"
+    hedef="$WORKDIR/${SN}.mp3"
+    basarili=0
+    for deneme in 1 2 3; do
+      wget -q -T 15 -U Mozilla -O "$hedef" \
+        "https://translate.google.com/translate_tts?ie=UTF-8&tl=${VX[1]}&client=tw-ob&q=${YZ,,}" \
+        2>/dev/null
+      if [[ -s "$hedef" ]]; then basarili=1; break; fi
+      sleep 1
+    done
+    if [[ "$basarili" == 1 ]]; then
+      ((aa++)) || true
+      boyut_ekle "$hedef"
+    else
+      echo -e "\n⚠️  UYARI: '${YZ}' için ses indirilemedi (3 deneme başarısız, SN=${SN}), bu satır atlanıyor" >&2
+      : >"$hedef"
+    fi
+    Y=$(("${aa}*100/${bb}*100"/100))
+    B=$(("${Y}*5"/10))
+    K=$((50-B))
+    cubuk_olustur '┃' "$B" T
+    cubuk_olustur '╺' "$K" E
+    j="\e[1;3"${D:i++%${#D}:1}"m"
+    echo -ne "\r${y_K}$(boyut_okunabilir)${y_X}${j}\
+    ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
+  done <"${VX[0]}"
+
+  if (( "$(head -n1 "${VX[0]}"|cut -d# -f1)" >= 1 )); then
+   sox -n -r 44100 "$WORKDIR/ff/0.mp3" trim 0.0 "$(head -n1 "${VX[0]}"|cut -d# -f1)".000
+   echo "file '$WORKDIR/ff/0.mp3' " >"$WORKDIR/ff/bir.log"
+  else
+   echo -ne >"$WORKDIR/ff/bir.log"
+  fi
+
+  perl -e 'open SX, "cut -d# -f2 '"${VX[0]}"'|" or die $_=qx(notify-send --icon=info "SRT OKUNAMADI");
+  my @x1;
+  my $i = 1;
+  while(<SX>){
+    my ($x1, $x2, $x3, $x4, $x5) = split/(:|,)/;
+    unshift(@x1, $x1*60*60+$x3*60+$x5);
+    if (defined @x1[1]){
+     $x2 = pop @x1;
+     $x4 = @x1[0]-$x2;
+     print $x4,"\t",$x2,".mp3\t$i\n";
+     $i += 1;
+    }
+  } print @x1,".mp3\t$i\n";' > "$WORKDIR/Z_M.log"
+
+  bb="$(grep -c 'mp3' <"$WORKDIR/Z_M.log")"
+  i=0
+  BOYUT_TOPLAM=0
+  while read -ra oku; do
+   if [[ "${#oku[@]}" == 3 ]]; then
+    sox -q "$WORKDIR/${oku[1]}" "$WORKDIR/X.mp3" tempo "${VX[2]}" rate 44100
+    SES="$(soxi "$WORKDIR/X.mp3"|awk -F':|\\.' '/Duration/{print $4+0}')"
+    sox -q -n -r 44100 "$WORKDIR/x.mp3" trim 0.0 "${oku[0]}".000
+    if [[ "${SES}" -lt "${oku[0]}" ]]; then
+     sox -q -M "$WORKDIR/x.mp3" "$WORKDIR/X.mp3" "$WORKDIR/ff/${oku[2]}.mp3"
+    else
+     sox -q "$WORKDIR/X.mp3" "$WORKDIR/X.mp3" trim 0 "${oku[0]}".00 2>/dev/null
+     sox -q -M "$WORKDIR/x.mp3" "$WORKDIR/X.mp3" "$WORKDIR/ff/${oku[2]}.mp3"
+     TM="`printf '%02d:%02d:%02d' \
+     "$((${oku[1]/.*/}/3600%24))" "$((${oku[1]/.*/}/60%60))" "$((${oku[1]/.*/}%60))"`"
+     awk -F# '/^'"$TM"'/{print $1"\n"$2"\n\n"}' "$WORKDIR/sub.log" >>"$WORKDIR/A.log"
+    fi
+    rm -f "$WORKDIR/x.mp3" "$WORKDIR/X.mp3" 2>/dev/null
+
+    echo "file '$WORKDIR/ff/${oku[2]}.mp3' " >>"$WORKDIR/ff/bir.log"
+    boyut_ekle "$WORKDIR/ff/${oku[2]}.mp3"
+    Y=$(("$((oku[2]+1))*100/${bb}*100"/100))
+    B=$(("${Y}*5"/10))
+    K=$((50-B))
+    cubuk_olustur '┃' "$B" T
+    cubuk_olustur '╺' "$K" E
+    j="\e[1;3"${D:i++%${#D}:1}"m"
+    echo -ne "\r${y_K}$(boyut_okunabilir)${y_X}${j}\
+    ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
+   else
+    sox -q "$WORKDIR/${oku[0]}" "$WORKDIR/ff/${oku[1]}.mp3" tempo "${VX[2]}"
+    echo "file '$WORKDIR/ff/${oku[1]}.mp3' " >>"$WORKDIR/ff/bir.log"
+    echo
+    echo -e "\n\e[1;33m⚠️  Ses Dosyaları işleniyor.....\e[0m "
+    : > "$WORKDIR/f1.txt"
+    ffmpeg -nostdin -loglevel quiet -progress "$WORKDIR/f1.txt" \
+    -f concat -safe 0 -i "$WORKDIR/ff/bir.log" -c:a copy "${VX[3]/.*/}.mp3" >/dev/null 2>&1 &
+    ff=$!
+    while ps "$ff" >/dev/null; do
+      if [[ -s "$WORKDIR/f1.txt" ]]; then
+        fr=$(awk -F= '/^frame=/{print $2}' "$WORKDIR/f1.txt" 2>/dev/null | tail -n1 | tr -d ' ')
+        tm=$(awk -F= '/^out_time=/{print $2}' "$WORKDIR/f1.txt" 2>/dev/null | tail -n1 | cut -d. -f1)
+        sp=$(awk -F= '/^speed=/{print $2}' "$WORKDIR/f1.txt" 2>/dev/null | tail -n1)
+        if [[ -n "$tm" ]]; then
+          echo -ne "\r\e[KIşlem Durumu: Kare: ${fr:-0} | Süre: ${tm} | Hız: ${sp:-0x}"
+        fi
+      fi
+      sleep 0.3
+    done
+    if test -e "$WORKDIR/ff/bir.log"; then
+     echo -e "\n\e[1;33m⚠️  Video Ses birleştirme yapılsın mı? [D]ublajla / [Ç]IKIŞ:\e[0m "
+     read -r -p "Seçiminiz (D/Ç): " secim < /dev/tty || true
+     case "${secim,,}" in
+      d|dublaj|dublajla)
+      test -f "$WORKDIR/A.log" && {
+      yad --text-info --title="HATA TOPLAM :   $(grep -c "[0-9][0-9]:" "Tarif pizza.srt")" \
+          --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+          --height=400 --width=700 --wrap --justify=center < <(
+          echo -e "DİKKAT: \n"
+          echo -e "Devam edilirse zaman kayması olmasın diye uzun altyazılar kesilecek."
+          echo -e "Cancel tuşuna basarsanız işlem iptal olur.\nOK tuşuna basarsanız devam eder.\n"
+          echo -e "--------------------------------------------------------------------------------\n"
+          fmt -sw 80 "Tarif pizza.srt"
+      ) || true
+      }
+      echo -ne "\r⏳ Dublaj video oluşturuluyor, lütfen bekleyin...\n"
+      : > "$WORKDIR/f1.txt"
+      ffmpeg -v quiet -progress "$WORKDIR/f1.txt" \
+             -i "${VX[3]}" -i "${VX[3]/.*/}.mp3" \
+             -map 0:v:0 -map 1:a:0 -c copy \
+             "${VX[3]/.*/}.${VX[1]}.mkv" >/dev/null 2>&1 &
+
+      ff=$!
+      while ps "$ff" >/dev/null; do
+       if [[ -s "$WORKDIR/f1.txt" ]]; then
+           fr=$(awk -F= '/^frame=/{print $2}' "$WORKDIR/f1.txt" 2>/dev/null | tail -n1 | tr -d ' ')
+           tm=$(awk -F= '/^out_time=/{print $2}' "$WORKDIR/f1.txt" 2>/dev/null | tail -n1 | cut -d. -f1)
+           sp=$(awk -F= '/^speed=/{print $2}' "$WORKDIR/f1.txt" 2>/dev/null | tail -n1)
+           if [[ -n "$tm" ]]; then
+               echo -ne "\r\e[Kİşlem Durumu: Kare: ${fr:-0} | Süre: ${tm} | Hız: ${sp:-0x}"
+           fi
+       fi
+       sleep 0.3
+      done
+      echo -ne "\r\n"
+      echo -ne "\r${m_i}${y_K}TAMAMLANDI:${y_x}${r_X} '${VX[3]/.*/}.${VX[1]}.mkv'\n"
+      ;;
+      c|ç|çıkış|*)
+          echo -ne "\r${m_i}${y_K}SES SEÇİLDİ:${y_x}${r_X} '${VX[3]/.*/}.${VX[1]}.mp3'\n"
+          exit 0
+      ;;
+     esac
+    fi
+   fi
+  done <"$WORKDIR/Z_M.log"
+  set +e +o pipefail
+    ;;
+  -m)
+  # Aynı anda birden fazla çalışmayı engelle (yarım kalan dosyalar karışmasın)
+    exec 9>"$LOCK_FILE"
+    if ! flock -n 9; then
+      echo -e "${k_i}${y_K}Zaten çalışan bir SUBSES işlemi var.${y_X}${r_X}" >&2
+      yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+            --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+            --text "SUBSES zaten çalışıyor...\!\nDevam edilsin mi?" \
+            --button=HAYIR:1 --button=EVET:0 --buttons-layout=center
+        if [[ $? -ne 0 ]]; then
+            exit 0
+        else
+            exit 1
+        fi
+    fi
+
+    cop() {
+      find "$SES_DIR" -maxdepth 1 -type f \( \
+                        -iname "*.mp3" \
+                        -o -iname "bir.txt" \
+                        -o -iname "xterm.log" \
+                        -o -iname "tail.pid" \) -exec rm -f {} \;
+    }
+
+    term=""
+    temizle() {
+      [[ -n "$term" ]] && kill "$term" 2>/dev/null
+      [[ -f "$SES_DIR/tail.pid" ]] && kill -9 "$(<"$SES_DIR/tail.pid")" 2>/dev/null
+      cop 2>/dev/null
+    }
+    trap temizle EXIT INT TERM
+
+    if test -d "$SES_DIR"; then cop 2>/dev/null; else mkdir -p "$SES_DIR"; fi
+
+    dil="$2"
+    metin="$3"
+    dosya="$4"
+
+    if test -z "$dosya"; then
+      if [[ "$XDG_SESSION_TYPE" == "wayland" ]]; then
+        pano="$(wl-paste 2>/dev/null)"
+      else
+        pano="$(xclip -o -selection clipboard 2>/dev/null)"
+      fi
+      # $3 zaten verilmişse onu koru, verilmemişse pano içeriğini kullan
+      [[ -z "$metin" ]] && metin="$pano"
+
+      echo "İşlem başlatılıyor..." >"$SES_DIR/xterm.log"
+      ( tail -n0 -f "$SES_DIR/xterm.log" 2>/dev/null & echo $! >"$SES_DIR/tail.pid" ) | \
+      yad --text-info --tail \
+          --title='𝕊𝕌𝔹𝕊𝔼𝕊' \
+          --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+          --width=600 --height=140 \
+          --posx=10 --posy=350 \
+          --fontname="Monospace 11" \
+          --no-buttons &
+      term=$!
+
+      dosya="$(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --window-icon="$HOME/.local/lib/subses-app/subses.png" --file --save)"
+      if [[ -z "$dosya" ]]; then
+        echo -e "${k_i}${y_K}Kayıt konumu seçilmedi, iptal edildi.${y_X}${r_X}" >&2
+        exit 1
+      fi
+      dosya="${dosya}.mp3"
+    fi
+
+    if [[ -z "$metin" ]]; then
+      echo -e "${k_i}${y_K}Seslendirilecek metin bulunamadı.${y_X}${r_X}" >&2
+      exit 1
+    fi
+
+    : >"$SES_DIR/bir.txt"
+
+    # Metni cümlelere ayır (orijinal mantık korunuyor)
+    mapfile -t cumleler < <(tr '.|?|!|,|:|;' '\n' <<<"$metin" | awk 'NF' \
+      | sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//')
+
+    # Google TTS'in ~200 karakter sınırını aşan cümleleri kelime bazlı küçük parçalara böl
+    parcala() {
+      local cumle="$1" limit="$2"
+      local -a kelimeler
+      read -ra kelimeler <<<"$cumle"
+      local mevcut=""
+      local k
+      for k in "${kelimeler[@]}"; do
+        if (( ${#mevcut} + ${#k} + 1 > limit )); then
+          [[ -n "$mevcut" ]] && printf '%s\n' "$mevcut"
+          mevcut="$k"
+        else
+          mevcut="${mevcut:+$mevcut }$k"
+        fi
+      done
+      [[ -n "$mevcut" ]] && printf '%s\n' "$mevcut"
+    }
+
+    parcalar=()
+    for c in "${cumleler[@]}"; do
+      [[ "$c" =~ [A-Za-z] ]] || continue
+      while IFS= read -r p; do
+        parcalar+=("$p")
+      done < <(parcala "$c" "$CHUNK_LIMIT")
+    done
+
+    R="${#parcalar[@]}"
+    if (( R == 0 )); then
+      echo -e "${k_i}${y_K}Seslendirilecek geçerli metin bulunamadı.${y_X}${r_X}" >&2
+      exit 1
+    fi
+
+    echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSES: ${dosya}\nDiL: ${dil}"
+
+    # --- Tek bir parçayı indiren fonksiyon (paralel çalıştırılacak) ---
+    indir() {
+      local idx="$1" metin_parca="$2" dil="$3" dizin="$4"
+      local hedef deneme=0
+      hedef="$dizin/$(printf '%05d' "$idx").mp3"
+      until curl -fsSL -A "Mozilla" --connect-timeout 5 --max-time 20 \
+          -G "https://translate.google.com/translate_tts" \
+          --data-urlencode "ie=UTF-8" \
+          --data-urlencode "tl=${dil}" \
+          --data-urlencode "client=tw-ob" \
+          --data-urlencode "q=${metin_parca,,}" \
+          -o "$hedef" 2>/dev/null; do
+        (( deneme++ ))
+        (( deneme >= 3 )) && return 1
+        sleep 1
+      done
+    }
+    export -f indir
+
+    # --- Gerçek zamanlı ilerleme göstergesi (arka planda) ---
+    (
+      while :; do
+        n=$(find "$SES_DIR" -maxdepth 1 -name '*.mp3' -size +0c 2>/dev/null | wc -l)
+        Y=$(( n * 100 / R ))
+        B=$(( Y * 5 / 10 )); K=$(( 50 - B ))
+        T=$(perl -E 'say "┃"x'"$B")
+        Eb=$(perl -E 'say "╺"x'"$K")
+        echo -ne "\r${y_K}$(du -hs "$SES_DIR" 2>/dev/null | cut -f1)${y_X}${k_i}\
+        ╏${T}${r_X}${m_r}${y_K}${Eb}${y_X}${r_X}╏\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
+        if [[ -n "$term" ]] && ps -p "$term" >/dev/null 2>&1; then
+          echo "${n}/${R} ╏${T}${Eb}╏${Y}%" >"$SES_DIR/xterm.log"
+        fi
+        (( n >= R )) && break
+        sleep 0.3
+      done
+    ) &
+    izleyici=$!
+    pids=()
+    for (( i=0; i<R; i++ )); do
+      idx=$((i+1))
+      indir "$idx" "${parcalar[$i]}" "$dil" "$SES_DIR" &
+      pids+=("$!")
+      if (( ${#pids[@]} >= MAX_PARALLEL )); then
+        wait "${pids[0]}" 2>/dev/null
+        pids=("${pids[@]:1}")
+      fi
+    done
+    for p in "${pids[@]}"; do
+      wait "$p" 2>/dev/null
+    done
+    kill "$izleyici" 2>/dev/null; wait "$izleyici" 2>/dev/null
+    echo
+
+    # --- Sıralı concat listesi oluştur (indirme sırasına değil, gerçek metin sırasına göre) ---
+    eksik_dosya=0
+    for (( i=1; i<=R; i++ )); do
+      f="$SES_DIR/$(printf '%05d' "$i").mp3"
+      if [[ -s "$f" ]]; then
+        echo "file '${f}'" >>"$SES_DIR/bir.txt"
+      else
+        (( eksik_dosya++ ))
+      fi
+    done
+
+    if (( eksik_dosya == 0 )); then
+      echo -ne "\r\nSon işlem başlatıldı: ${dosya}\n"
+      if ffmpeg -nostdin -loglevel quiet -f concat -safe 0 -i "$SES_DIR/bir.txt" -c:a copy "$dosya"; then
+        echo -ne "\r\n${m_i}${y_K}BİTTİ${y_X}${r_X}\n${y_K}${dosya}${y_X}\n"
+        [[ -n "$term" ]] && ps -p "$term" >/dev/null 2>&1 && echo "BİTTİ: ${dosya}" >"$SES_DIR/xterm.log"
+      else
+        echo -e "\nHatalı işlem.."
+      fi
+    else
+      echo -e "\n${k_i}${y_K}İŞLEM HATASI: ${eksik_dosya} parça indirilemedi.${y_X}${r_X}"
+      if [[ -n "$term" ]] && ps -p "$term" >/dev/null 2>&1; then
+        yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+            --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+            --height=10 --width=400 --dnd --text="Hatalı işlem sonu.."
+      fi
+    fi
+    ;;
+  -c)
+    exec 8>"/tmp/ses/subses-c.lock"
+    if ! flock -n 8; then
+      echo -e "${k_i}${y_K}Zaten çalışan bir SUBSES (-c) işlemi var.${y_X}${r_X}" >&2
+      exit 1
+    fi
+
+    set -e
+    term=""
+    ceviri_dizin=""
+    # İptal etme olasılığına karşın artık dosya temizleme.
+    TEMiZLE() {
+      [[ -n "$term" ]] && { kill "$term" 2>/dev/null || true; }
+      [[ -f '/tmp/ses/tail.pid' ]] && { kill -9 "$(</tmp/ses/tail.pid)" 2>/dev/null || true; }
+      [[ -n "$ceviri_dizin" ]] && rm -rf "$ceviri_dizin" 2>/dev/null
+      [[ -n "${yol:-}" && -n "${sub[1]:-}" ]] && rm -f "${yol}.${sub[1]}.txt" 2>/dev/null
+      rm -f '/tmp/ses/tail.pid' '/tmp/ses/sub.srt' '/tmp/ses/xterm.log' '/tmp/ses/Z.log' '/tmp/ses/Sub.log' 2>/dev/null
+    }
+    hata_yakala() {
+      echo "❌ HATA: Betik beklenmedik bir şekilde sonlandırıldı!"
+      echo "📍 Hata satırı: $1"
+      echo "💻 Son çalıştırılan komut: $2"
+    }
+    trap 'hata_yakala "$LINENO" "$BASH_COMMAND"' ERR
+    trap TEMiZLE EXIT
+
+    # Altyazı varlığı kontrol ediliyor, yoksa yad kullanılarak kullanıcıdan istenir.
+    if [[ "${3/*./}" == "srt" ]]; then
+      if (( $(grep -o '#' <<<"$3" | wc -l) > 1 )); then
+        echo "Altyazı adından '#' kaldırın."
+        exit 2
+      fi
+      gir="$(pwd)/$3"
+      dos="$(basename "$gir")"
+      doy="$(dirname "$gir")"
+      yol="${doy}/${dos/.*/}"
+      yes | ffmpeg -nostdin -loglevel quiet -i "${doy}/${dos}" '/tmp/ses/sub.srt' >/dev/null
+      sub=( "/tmp/ses/sub.srt" "${2}" )
+      : >"${yol}.${sub[1]}.txt"
+    else
+      IFS='#' read -r -a sub < <(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --height=80 --width=300 \
+        --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+        --text="<span foreground='blue'><b><big><big>Gerekli ayarları secin:</big></big></b></span>" \
+        --form --separator='#' --field="Sub Dosya:FL" \
+        --field="<b><big><big>Sub Dil</big></big></b>" "tr")
+      dos="$(basename "${sub[0]}")"
+      doy="$(dirname "${sub[0]}")"
+      yol="${doy}/${dos/.*/}"
+      if (( $(grep -o '#' <<<"$sub" | wc -l) > 1 )); then
+        yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+            --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+            --height=100 --width=300 \
+            --text="Altyazı adından '#' kaldırın.\n${sub/\#*/}"
+        exit 2
+      fi
+      yes | ffmpeg -nostdin -loglevel quiet -i "${sub/\#*/}" '/tmp/ses/sub.srt' >/dev/null
+      sub=( "/tmp/ses/sub.srt" "$(cut -d# -f2 <<<"${sub[1]}")" )
+      : >"${yol}.${sub[1]}.txt"
+      # yad bilgilendirme penceresi gösterimi.
+      echo "İŞLEM BAŞLATILIYOR..." >'/tmp/ses/xterm.log'
+      ( tail -n0 -f '/tmp/ses/xterm.log' 2>/dev/null & echo $! >'/tmp/ses/tail.pid' ) | \
+      yad --text-info --tail \
+          --title='𝕊𝕌𝔹𝕊𝔼𝕊' \
+          --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+          --width=600 --height=140 \
+          --posx=10 --posy=350 \
+          --fontname="Monospace 11" \
+          --no-buttons &
+      term=$!
+    fi
+
+    if [[ -f '/tmp/ses/sub.srt' ]]; then
+      bas="$(grep -c '[0-9][0-9]:' "${sub[0]}")" || true
+      # Alınan altyazı dosyası düzenlenir ve işlem için log dosyasına kaydedilir.
+      paste -- \
+        <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}" | sed '$d') \
+        <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}" | sed '1d') | \
+        awk -F: '{print $2":"$3":"$4,$1}' >'/tmp/ses/Z.log'
+      grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}" | tail -n1 | \
+        awk -F: -v s="$(wc -l <"${sub[0]}")" '{print $2":"$3":"$4"\t"s+1,$1}' >>'/tmp/ses/Z.log'
+
+      while read -ra _oku; do
+        MT="$(sed -n -e 's/<[^>]*>//g' -e ''"$((_oku[2]+1)),$((_oku[1]-2))"'p' "${sub[0]}" | tr "\n" ' ')"
+        printf "%s_%s\n" "${_oku[0]}" "$MT" >>'/tmp/ses/Sub.log'
+        echo -ne "\r$(wc -l <'/tmp/ses/Sub.log') ➜ $(grep -c "[0-9][0-9]:[0-9][0-9]:" "${sub[0]}")"
+        [[ -n "$term" ]] && ps -p "$term" >/dev/null 2>&1 && \
+          echo "$(wc -l <'/tmp/ses/Sub.log') ➜ $(grep -c "^[0-9][0-9]:" "${sub[0]}")" >'/tmp/ses/xterm.log'
+      done <'/tmp/ses/Z.log'
+      echo -ne "\r\n"
+      echo -ne "\r${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${dos}\nDiL: ${sub[1]}\n"
+
+      # --- FAZ 1: her blok için başlık + çeviri parçalarını hazırla (ağ isteği YOK) ---
+      mapfile -t sub_satirlari <'/tmp/ses/Sub.log'
+      toplam_blok="${#sub_satirlari[@]}"
+      blok_baslik=()
+      blok_parca_sayisi=()
+      tum_parcalar=()
+      w=1
+      for oku in "${sub_satirlari[@]}"; do
+        baslik="$(awk -F_ -v n="$w" '/^'"${oku/_*/}"'/{print n"\n"$1}' "${sub[0]}")"
+        blok_baslik+=("$baslik")
+
+        ham="${oku/*_/}"
+        temiz="$(sed -e 's/([^)]*)//g' -e 's/\W/ /g' <<<"$ham")"
+        if grep -q "[[:alnum:]]" <<<"$temiz"; then
+          if (( ${#ham} < 200 )); then
+            X="$(tr -d '"\r' <<<"$ham")"
+            tum_parcalar+=("$X")
+            blok_parca_sayisi+=(1)
+          else
+            mapfile -t altparca < <(tr -d '"\r' <<<"$ham" | tr '.|?|!|:|;|,' '\n' | fmt -w 190)
+            tum_parcalar+=("${altparca[@]}")
+            blok_parca_sayisi+=("${#altparca[@]}")
+          fi
+        else
+          blok_parca_sayisi+=(0)
+        fi
+        (( w++ )) || true
+      done
+
+      toplam_parca="${#tum_parcalar[@]}"
+      if (( toplam_parca > 0 )); then
+        ceviri_dizin="$(mktemp -d /tmp/ses/c_ceviri.XXXXXX)"
+
+        ( while :; do
+            tamamlanan=$(find "$ceviri_dizin" -maxdepth 1 -name '*.txt' 2>/dev/null | wc -l)
+            Y=$(( tamamlanan * 100 / toplam_parca ))
+            echo -ne "\r${y_K}Çeviriler: ${tamamlanan}/${toplam_parca}${y_X} (%${Y})  "
+            if [[ -n "$term" ]] && ps -p "$term" >/dev/null 2>&1; then
+              echo "Çeviriler: ${tamamlanan}/${toplam_parca} (%${Y})" >'/tmp/ses/xterm.log'
+            fi
+            (( tamamlanan >= toplam_parca )) && break
+            sleep 0.3
+          done
+        ) &
+        ceviri_izleyici=$!
+
+        pids=()
+        for (( pi=0; pi<toplam_parca; pi++ )); do
+          pidx=$((pi+1))
+          ceviri_al "$pidx" "${tum_parcalar[$pi]}" "${sub[1]}" "$ceviri_dizin" &
+          pids+=("$!")
+          if (( ${#pids[@]} >= MAX_PARALLEL )); then
+            wait "${pids[0]}" 2>/dev/null || true
+            pids=("${pids[@]:1}")
+          fi
+        done
+        for p in "${pids[@]}"; do
+          wait "$p" 2>/dev/null || true
+        done
+        kill "$ceviri_izleyici" 2>/dev/null || true
+        wait "$ceviri_izleyici" 2>/dev/null || true
+        echo
+      fi
+
+      i=0
+      D="01234567"
+      gidx=1
+      for (( b=0; b<toplam_blok; b++ )); do
+        printf '%s\n' "${blok_baslik[$b]}" >>"${yol}.${sub[1]}.txt"
+        sayi="${blok_parca_sayisi[$b]}"
+        if (( sayi > 0 )); then
+          _DEPO=""
+          for (( pj=0; pj<sayi; pj++ )); do
+            _DEPO+="$(cat "$ceviri_dizin/$(printf '%05d' "$gidx").txt" 2>/dev/null)"$'\n'
+            (( gidx++ )) || true
+          done
+          fmt -w 80 <<<"$_DEPO" >>"${yol}.${sub[1]}.txt"
+        fi
+        echo >>"${yol}.${sub[1]}.txt"
+
+        son="$(grep -c '[0-9][0-9]:' "${yol}.${sub[1]}.txt")" || true
+        bak="$(du -h "${yol}.${sub[1]}.txt" 2>/dev/null | cut -f1)"
+        Y=$(( son * 100 / bas ))
+        B=$(( Y * 5 / 10 )); K=$(( 50 - B ))
+        T=$(perl -E 'say "┃"x'"$B")
+        E=$(perl -E 'say "╺"x'"$K")
+        # shellcheck disable=SC2027
+        j="\e[1;3"${D:i++%${#D}:1}"m"
+        echo -ne "\r${y_K}${bak}${y_X}${j}\
+        ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y} %${y_X}${r_X}"
+        [[ -n "$term" ]] && ps -p "$term" >/dev/null 2>&1 && \
+          echo "${bak} ╏${T}${E}╏${Y}%" >'/tmp/ses/xterm.log'
+      done
+
+      if ffmpeg -nostdin -loglevel quiet -i "${yol}.${sub[1]}.txt" "${yol}.${sub[1]}.srt"; then
+        [[ -n "$term" ]] && echo -e "TAMAMLANDI: \n '${yol}.${sub[1]}.srt' \n" >'/tmp/ses/xterm.log'
+        echo -ne "\r\n${m_i}${y_K}TAMAMLANDI:${y_X}${r_X}\n${y_K}'${yol}.${sub[1]}.srt'${y_X}\n"
+      else
+        echo -e "\r\n${k_i}${y_K}SRT FORTMAT HATASI VERDİ${y_X}${r_X}\n${y_K}'${yol}.${sub[1]}.srt'"
+        [[ -n "$term" ]] && echo "SRT FORMAT HATASI....!" >'/tmp/ses/xterm.log'
+      fi
+    else
+      [[ -n "$term" ]] && ps -p "$term" >/dev/null 2>&1 && echo "SRT FORMAT HATASI....!" >'/tmp/ses/xterm.log'
+      sleep 2
+      echo "SRT Formatını Kontrol edin ve tekrardan deneyin...!"
+    fi
+    set +e
+    ;;
+  -k)
+    if [[ "$2" =~ ^- ]]; then
+      # işlem çalıştığını göstermek icon koyulur. Kapatmak için icona tıklamak gerekir.
+      yad --notification --listen \
+          --image="$HOME/.local/lib/subses-app/subses.png" \
+          --command="rm /tmp/ses/AT" & _yad="$!"
+      sleep "$(tr -d - <<<"$2")"
+
+      metin="${5:-$(pano_oku)}"
+      # Satır boyutu sınırlandırılır, temizlenir ve paralel çevrilir.
+      mapfile -t birimler < <(tr '.|?|!|:|;|,' '\n' <<<"$metin" | awk NF | \
+        while read -r oku; do
+          sed -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//' <<<"$oku" | tr -d '"'
+        done)
+      paralel_cevir "$3" "${birimler[@],,}" >'/tmp/ses/AT'
+
+      # çok satırlı olarak işlenir ve mpv kullanılarak seslendirilir. Mpv hız varsayılan hız 1.0'dır.
+      while read -r ou; do
+        mpv --no-terminal --speed="${4:-1.0}" --af=rubberband \
+        "https://translate.google.com/translate_tts?ie=UTF-8&tl=$3&client=tw-ob&q=${ou}"
+        [[ ! -e '/tmp/ses/AT' ]] && break
+      done <'/tmp/ses/AT'
+      # İşlem sonu yad kapatma ve dosya silmek.
+      kill -9 "$_yad" 2>/dev/null
+      rm -f '/tmp/ses/AT' 2>/dev/null
+    else
+      yad --notification --listen \
+          --image="$HOME/.local/lib/subses-app/subses.png" \
+          --command="rm /tmp/ses/AT" & _yad="$!"
+
+      metin="${4:-$(pano_oku)}"
+      mapfile -t birimler < <(tr '.|?|!|:|;|,' '\n' <<<"$metin" | awk NF | \
+        while read -r oku; do
+          sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//' <<<"$oku"
+        done)
+      paralel_cevir "$2" "${birimler[@],,}" >'/tmp/ses/AT'
+
+      while read -r ou; do
+        mpv --no-terminal --speed="${3:-1.0}" --af=rubberband \
+        "https://translate.google.com/translate_tts?ie=UTF-8&tl=$2&client=tw-ob&q=${ou}"
+        [[ ! -e '/tmp/ses/AT' ]] && break
+      done <'/tmp/ses/AT'
+      kill -9 "$_yad" 2>/dev/null
+    fi
+    rm -f '/tmp/ses/AT' 2>/dev/null
+    ;;
+  -t)
+    # 3.cü değer kontrol edilir, mevcut ise alınır yoksa panodan aktarılır.
+    if [[ "$3" == "X" ]]; then
+      mapfile -t birimler < <(metni_parcala "$(pano_oku)")
+      _DEPO="$(paralel_cevir "${2:-tr}" "${birimler[@]}")"
+      if echo -ne "$_DEPO" | pano_yaz; then
+        notify-send --icon="$HOME/.local/lib/subses-app/subses.png" "KOPYALANDI"
+      else
+        notify-send --icon="$HOME/.local/lib/subses-app/subses.png" "HATALI İŞLEM SONU..."
+      fi
+
+    elif [[ -z "$3" ]]; then
+      # Borulama ile alınan metinler
+      mapfile -t birimler < <(metni_parcala "$(cat)")
+      paralel_cevir "${2:-tr}" "${birimler[@]}"
+    elif [[ -n "$3" ]]; then
+      # Direk girilen metinler.
+      mapfile -t birimler < <(metni_parcala "$3")
+      paralel_cevir "${2:-tr}" "${birimler[@]}"
+    fi
+    ;;
+  -u)
+    : >'/tmp/ses/srt.sub'
+    if [[ -z "$3" || ! -f "$3" ]]; then
+      echo -e "${k_i}${y_K}Geçerli bir altyazı dosyası verilmedi: '$3'${y_X}${r_X}" >&2
+      exit 1
+    fi
+    exec 8>"/tmp/ses/subses-u.lock"
+    if ! flock -n 8; then
+      echo -e "${k_i}${y_K}Zaten çalışan bir SUBSES (-u) işlemi var.${y_X}${r_X}" >&2
+      exit 1
+    fi
+
+    tut() {
+      rm -rf '/tmp/ses/u' '/tmp/ses/s.sub' '/tmp/ses/srt.sub' "${3/.*/}_.txt" 2>/dev/null
+    }
+    mkdir -p "/tmp/ses/u"
+    trap tut EXIT
+
+    LT="$(grep -o "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$3"|uniq|wc -l)"
+    ( paste -- \
+      <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "$3"|sed '$d') \
+      <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "$3"|sed '1d')|tr '\t' ':'|awk -F: '{print $1,$5}';
+      grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" "$3"|tail -n1|awk -F: -v s="$(wc -l <"$3")" '{print $1,s+1}'; )|\
+    while read -ra X; do
+      MT="$(sed -n ''"$((X[0]+1)),$((X[1]-3))"'p' "$3"|tr [:space:] ' ')"
+      echo "$(sed -n ''"${X[0]}"'p' "$3")#$MT" >>'/tmp/ses/s.sub'
+      echo -ne "\r╏1/2╏ ${k_i}${y_K}$(wc -l <'/tmp/ses/s.sub')${y_X}${r_X} ${y_K}➜${y_X} ${m_i}${y_K}${LT}${y_X}${r_X} ╏"
+    done
+
+    onceki=""
+    grup_zaman=""
+    grup_metin=""
+    yaz_grup() {
+      [[ "$grup_metin" =~ ([A-Za-z]) ]] && echo "${grup_zaman}#${grup_metin}" >>'/tmp/ses/srt.sub'
+    }
+    while IFS='#' read -r zaman metin; do
+      anahtar="${zaman%%,*}"
+      if [[ "$anahtar" != "$onceki" ]]; then
+        [[ -n "$onceki" ]] && yaz_grup
+        onceki="$anahtar"
+        grup_zaman="$zaman"
+        grup_metin=""
+      fi
+      grup_metin+="$metin "
+      echo -ne "\r╏2/2╏ ${k_i}${y_K}$(wc -l <'/tmp/ses/srt.sub' 2>/dev/null || echo 0)${y_X}${r_X} ${y_K}➜${y_X} ${m_i}${y_K}${LT}${y_X}${r_X} ╏"
+    done <'/tmp/ses/s.sub'
+    [[ -n "$onceki" ]] && yaz_grup
+
+    a=1
+    : >"${3/.*/}_.txt"
+    while read -r X; do
+    x="${X/*#/}"
+    if (( "$(grep -A 1 "$X" '/tmp/ses/srt.sub'|wc -l)" >= "2" )); then
+     Q=($(grep -A 1 "$X" '/tmp/ses/srt.sub'|awk -F":|,|-" '{printf "%s ",$1*60*60+$2*60+$3"."$4}'))
+     for i in $2 ; do
+      if (( "${#x}" >= "$(cut -d- -f1 <<<"$i")" && "${#x}" < "$(cut -d- -f2 <<<"$i")" )); then
+       if (( "$(echo "${Q[0]} ${i/*-/} +p"|dc|tr -d .)" < "$(tr -d . <<<"${Q[1]}")" )); then
+        A="$(echo "${Q[0]} ${i/*-/} +p"|dc)"
+        grep "$(cut -d# -f1 <<<"$X")" "${3/.*/}_.txt" 2>&1 >/dev/null||\
+        printf "${a}\n$(cut -d ' ' -f1 <<<"$X") --> %02d:%02d:%02d,${A/*./}\n${x}\n\n"\
+               "$((${A/.*/}/3600))" "$((${A/.*/}%3600/60))" "$((${A/.*/}%60))" >>"${3/.*/}_.txt"
+        echo 1 >>"/tmp/ses/u/${i}"
+        break
+       else
+        A="$(echo "${Q[1]} 0.100 -p"|dc)"
+        grep "$(cut -d# -f1 <<<"$X")" "${3/.*/}_.txt" 2>&1 >/dev/null||\
+        printf "${a}\n$(cut -d ' ' -f1 <<<"$X") --> %02d:%02d:%02d,${A/*./}\n${x}\n\n"\
+               "$((${A/.*/}/3600))" "$((${A/.*/}%3600/60))" "$((${A/.*/}%60))" >>"${3/.*/}_.txt"
+        echo 1 >>"/tmp/ses/u/${i}"
+        break
+       fi
+      fi
+     done
+     grep "$(cut -d# -f1 <<<"$X"|cut -d' ' -f1)" "${3/.*/}_.txt" 2>&1 >/dev/null||\
+     awk -F# -v a="$a" '{print a"\n"$1"\n"$2"\n"}' <<<"${X}" >>"${3/.*/}_.txt"
+    else
+     Q="$(awk -F":|,|-" '{printf "%s ",$1*60*60+$2*60+$3"."$4}' <<<"$X")"
+     for i in $2 ; do
+      if (( "${#x}" >= "$(cut -d- -f1 <<<"$i")" && "${#x}" < "$(cut -d- -f2 <<<"$i")" )); then
+       A="$(echo "${Q[0]} ${i/*-/} +p"|dc)"
+       grep "$(cut -d# -f1 <<<"$X")" "${3/.*/}_.txt" 2>&1 >/dev/null||\
+       printf "${a}\n$(cut -d ' ' -f1 <<<"$X") --> %02d:%02d:%02d,${A/*./}\n${x}\n\n"\
+              "$((${A/.*/}/3600))" "$((${A/.*/}%3600/60))" "$((${A/.*/}%60))" >>"${3/.*/}_.txt"
+       echo 1 >>"/tmp/ses/u/${i}"
+       break
+      fi
+     done
+     grep "$(cut -d# -f1 <<<"$X"|cut -d' ' -f1)" "${3/.*/}_.txt" 2>&1 >/dev/null||\
+     awk -F# -v a="$a" '{print a"\n"$1"\n"$2"\n"}' <<<"${X}" >>"${3/.*/}_.txt"
+    fi
+    echo -ne "\r\t"
+    echo -ne "\rDEĞiŞTi ╏$a╏ ${k_i}${y_K}$(awk '{s+=$1}END{print s}' /tmp/ses/u/* 2>/dev/null)${y_X}${r_X} ${y_K}➜${y_X} ${m_i}${y_K}${LT}${y_X}${r_X} ╏"
+    (( a++ )) || true
+    done <'/tmp/ses/srt.sub' 2>/dev/null
+    echo
+
+    # Verilen kurallara uyan zaman birimlerin sayısı
+    for i in /tmp/ses/u/* ; do
+     echo -e "\n${i##*/}\t ➜  $(awk '{s+=$1}END{print s}' "$i")"
+    done|awk NF
+
+    if ffmpeg -y -nostdin -loglevel quiet -i "${3/.*/}_.txt" "${3/.*/}_.srt"; then
+      echo -e "\n${k_i}${y_K}TAMAMLANDI${y_X}${r_X} \n${3/.*/}_.srt"
+      rm -rf "${3/.*/}_.txt" 2>/dev/null
+    else
+      echo -e "\n${k_i}${y_K}SRT DÖNÜŞÜM HATASI${y_X}${r_X}"
+    fi
+    ;;
+  -i)
+    exec 8>"/tmp/ses/subses-i.lock"
+    if ! flock -n 8; then
+      echo -e "${k_i}${y_K}Zaten çalışan bir SUBSES (-i) işlemi var.${y_X}${r_X}" >&2
+      exit 1
+    fi
+    rm -f '/tmp/ses/OCR' '/tmp/ses/OCR.png' '/tmp/ses/X.log' 2>/dev/null
+
+    # OCR ile yazıyı metne dökmek için tesseract kullanılmıştır.
+    read -ra OCR< <(yad --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+        --title="⟆υᑲ⟆∈⟆" --completion \
+        --entry="Name:" ""  $(tesseract --list-langs|awk '{printf "\" %s \" ",$0}')|\
+        while read line; do EX=`echo $line|awk -F',' '{print $1}'`; echo "$EX"; done; sleep 0.1)
+    sleep 0.5
+    # Ekran görüntüsü alınarak tesseract ile işlem yapılır. Resim boyutu x2 ve negatif ayarlanır.
+    if [[ "$XDG_SESSION_TYPE" == "x11" ]]; then
+      ( import png:-; sleep 0.1; ) >'/tmp/ses/OCR.png'
+    else
+      spectacle -b -r -o '/tmp/ses/OCR.png'
+    fi
+    if [[ ! -s '/tmp/ses/OCR.png' ]]; then
+      notify-send --icon="$HOME/.local/lib/subses-app/subses.png" "OCR" "Görüntü alınamadı veya seçim iptal edildi"
+      rm -f '/tmp/ses/OCR.png' 2>/dev/null
+      exit 1
+    fi
+    magick /tmp/ses/OCR.png -colorspace Gray -resize 300% -sharpen 0x1 -contrast-stretch 0.5%x0.5% /tmp/ses/OCR.png
+
+    if TEXT=$(timeout 30 tesseract '/tmp/ses/OCR.png' - -l "${OCR[0]}" --oem 1 --psm 6 2>'/tmp/ses/X.log'); then
+      tr -d '"' <<<"$TEXT"|tr '\n' ' '|perl -pe 's/[^a-zA-ZçÇğĞıİöÖşŞüÜ]/ /g' >'/tmp/ses/OCR'
+    else
+      EXIT_CODE=$?
+      ICON_PATH="$HOME/.local/lib/subses-app/subses.png"
+      if [ $EXIT_CODE -eq 124 ]; then
+        notify-send --icon="$ICON_PATH" "ZAMAN AŞIMI" "Tesseract 30 saniye içinde yanıt vermedi."
+      else
+        notify-send --icon="$ICON_PATH" "HATALI SONUÇ" "$(tail -n1 '/tmp/ses/X.log')"
+      fi
+    fi
+    if [[ "$(</tmp/ses/OCR)" =~ ([A-Za-z]) ]]; then
+      case $2 in
+      -y | --yaz)
+        notify-send --icon="$HOME/.local/lib/subses-app/subses.png" "$(wget -U "Mozilla/5.0" -q -O- \
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(</tmp/ses/OCR)"|awk -F'"' '{print $2}'|fmt -sw 100)"
+        ;;
+      -o | --oku)
+        ses="$(wget -U "Mozilla/5.0" -q -O- \
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(</tmp/ses/OCR)"|awk -F'"' '{print $2}')"
+        mpv --no-terminal --speed="${OCR[2]:-1.0}" --af=rubberband \
+        "https://translate.google.com/translate_tts?ie=UTF-8&tl=${OCR[1]}&client=tw-ob&q=${ses,,}"
+        ;;
+      esac
+    fi
+    rm -rf '/tmp/ses/OCR' '/tmp/ses/OCR.png' '/tmp/ses/X.log' 2>/dev/null
+    ;;
+  -l)
+echo -e "afr Afrikaans
+amh Amharic
+ara Arabic
+asm Assamese
+aze Azerbaijani
+aze_cyrl Azerbaijani - Cyrillic
+bel Belarusian
+ben Bengali
+bod Tibetan
+bos Bosnian
+bul Bulgarian
+cat Catalan; Valencian
+ceb Cebuano
+ces Czech
+chi_sim Chinese - Simplified
+chi_tra Chinese - Traditional
+chr Cherokee
+cym Welsh
+dan Danish
+deu German
+dzo Dzongkha
+ell Greek, Modern (1453-)
+eng English
+enm English, Middle (1100-1500)
+epo Esperanto
+est Estonian
+eus Basque
+fas Persian
+fin Finnish
+fra French
+frk German Fraktur
+frm French, Middle (ca. 1400-1600)
+gle Irish
+glg Galician
+grc Greek, Ancient (-1453)
+guj Gujarati
+hat Haitian; Haitian Creole
+heb Hebrew
+hin Hindi
+hrv Croatian
+hun Hungarian
+iku Inuktitut
+ind Indonesian
+isl Icelandic
+ita Italian
+ita_old Italian - Old
+jav Javanese
+jpn Japanese
+kan Kannada
+kat Georgian
+kat_old Georgian - Old
+kaz Kazakh
+khm Central Khmer
+kir Kirghiz; Kyrgyz
+kor Korean
+kur Kurdish
+lao Lao
+lat Latin
+lav Latvian
+lit Lithuanian
+mal Malayalam
+mar Marathi
+mkd Macedonian
+mlt Maltese
+msa Malay
+mya Burmese
+nep Nepali
+nld Dutch; Flemish
+nor Norwegian
+ori Oriya
+pan Panjabi; Punjabi
+pol Polish
+por Portuguese
+pus Pushto; Pashto
+ron Romanian; Moldavian; Moldovan
+rus Russian
+san Sanskrit
+sin Sinhala; Sinhalese
+slk Slovak
+slv Slovenian
+spa Spanish; Castilian
+spa_old Spanish; Castilian - Old
+sqi Albanian
+srp Serbian
+srp_latn Serbian - Latin
+swa Swahili
+swe Swedish
+syr Syriac
+tam Tamil
+tel Telugu
+tgk Tajik
+tgl Tagalog
+tha Thai
+tir Tigrinya
+tur Turkish
+uig Uighur; Uyghur
+ukr Ukrainian
+urd Urdu
+uzb Uzbek
+uzb_cyrl Uzbek - Cyrillic
+vie Vietnamese
+yid Yiddish "
+    ;;
+  -v)
+  echo "${y_K}⟆υᑲ⟆∈⟆${y_X} v2.0"
+    ;;
+  -y)
+less <<<"$SUBSES
+Videoları dublajlı olarak izlemek için yazılmış bir uygulamadır.
+Altyazı hataları veya düzenlemede yapılabilir.
+\$PATH belirtilen herhangi yolda çalıştırın. /tmp/ses 'de geçici
+olarak dosyalar oluşturur ve sonrasında silinir.Çevirme ve ses
+tanıma işlemde google url kullanılır. Altyazıda belirlenebilen
+hatalar bildirilir. Belirlenemeyen hatalı srt dosyalarında format
+(biçim) sorunu olabilir. Srt kalitesine bağlı olarak perfonmas alınır.
+
+PAREMETRELER VE ÖRNEK KULLANIM:
+-s    Ses dosyası oluşturma işlemi yapmak için kullanılır.
+      İsteğe bağlı olarak oluşturulan ses dosyası video ile
+      Dual olarak birleştirme yapılabilir.
+      Orj ses silinir, oluşturulan ses ile birleştirilir,
+      Verilen tempo altyazı için yetersiz kullanılırsa
+      uygun olan zamana göre kesilir, kesilen altyazılar
+      yad ile listelenilir. Bu şekilde ses kaydırma
+      sorunu çözülür. Farklı bir çözümü tempo yükseltmek
+      veya altyazıyı düzenleyerek kısaltmaktır.
+
+      subses -s 'video.srt' tr-1.5 'video.mp4'
+
+
+-m    Metin girdisini ses dosyası olarak kayıt işlemi yapılır.
+      Uzun metni ses dosyası olarak kayıt edilir. İşlem yapılacak
+      metin mouse ile seçilir veya kopyalanır.
+      Kaydedilecek yer ve ad istenir 'ses' gibi ve işlem başlar.
+      Tuş konbinasyonu ile çalıştırıldığında xterm ile bilgi verilir.
+
+      subses -m tr
+
+      Terminal üzerinden çalışmak için örnek:
+      subses -m tr 'selam sinan' '/home/$USER/Müzik/ses.mp3'
+
+
+-z    Altyazı zamanlamasını yeniden yapılandırma işlemi.
+      ileri doğru 1 saniye kaydırmak için +1.000 şeklinde verilmelidir,
+      geriye doğru ise -1.000, saniselik kaydırma için
+      0.750 şeklinde bu 750 saniselik bir kaydırma yapacaktır.
+      Terminal de sadece -z paremetre kullanılırsa yad arayüzü gelir sub
+      ve zaman girilmesi istenir.
+      ÖRNEĞİN: subses -z
+
+      Direk de girilebilir, 1 saniye ileri kaydırma için:
+      subses -z +1.000 'srt.srt'
+
+      1 saniye 500 saniselik geriye kaydırma için:
+      subses -z -1.500 'srt.srt'
+
+
+-c    Altyazı çevirme işlemi yapmak için: ( subses -c )
+      sadece verildiğinde gerekli ayarlar yad tarafından istenir.
+      Terminalden vermek için de bu şekilde verilir:
+
+      subses -c tr 'sub.srt'
+
+      Srt mevcut dil otomatik tespit edilir ve belirtilen dile çevrilir.
+
+
+-k    Giriş metni belirtilen dilde seslendir. 2 farklı girdi alınabilir.
+
+      tr :  Telafuz edilecek dil
+      1.5:  Konuşma hızı
+
+      subses -k tr 1.2 'Hello boys'
+
+      Zaman görevi de eklenebilir. Bu verilen sayı saniye olarak
+      algılanır, o süreç sonrası işleme başlar.
+      3 sn bekle sonra oku dersek örneğimiz bu şekilde olur:
+
+      subses -k -3 tr 1.5 'selam dostlar'
+
+      Tuş konbinasyonu yapmak için kulanabiliriz.
+      Çalışma esnasında  uyg iconuna tıklandığında işlem sonlandırılır.
+
+      subses -k tr 1.2
+
+
+-i    OCR için tesseract kullanılmıştır.
+      Yad ile dil girilir ve seslendirilir:
+      subses -i -o
+
+      Yad ile dil girilir ve bildirim şeklinde yazdırılır:
+      subses -i -y
+
+      Yukardaki örneklerde girildiğinde Yad menu gelir.
+      İlk resimdeki yazı kodu sonrasında istenilen çıktı dil kodu verilir.
+      İsteğe bağlı olarak seslendirme tempo verilebilir.
+
+      'emg tr' örnek de ingilizce'den türkçeye çevrilir.
+
+      Seslendirme işleminde tempo hız bildirme. Belirtilmezse
+      1.0 varsayılan olarak ayarlanır.
+      örnek: eng tr 1.5
+
+
+-t    Çevirme işlemi yapılır. Örneğin Türkçe diline çevirme işlemi:
+
+      subses -t tr 'hello boys'
+      VEYA
+      echo 'Hello boy' | subses -t tr
+
+      Çıktıyı panoya kopyalamak için bu şekilde kullanabiliriz.
+      BU Örnekte xclip girdiyi alıp panoya yapıştırır. ( X )
+
+      subses -t tr X
+
+
+-u    Altyazı aralıkta olan hatalı veya yetersiz,aşırı kaçmış yada
+      sadece düzenleme amaçlı kullanabiliriz.Kullanım altyazının
+      karakter sayısını ele alınarak yapılmaktadır.
+      Örneğin: (sinan can) burada 9 karakter vardır.
+
+      01-10        Burda en az 1 karakter ile başlayan
+                  en fazla 10 karakter olan altyazılar belirtilir.
+
+      01-10-1.000  Burada yukarıda belirtiğimiz kurallara uyan altyazıların
+                  1 saniye olarak ayarlanmasını istemiş olduk.
+                  Verilen zaman sonraki altyazı zamanını geçme olasılığına
+                  karşın verilmiş zaman yerine maksimum zaman olarak
+                  ayarlanacaktır. Bir görev veya çoklu görev verilebilir.
+                  Çoklu görev verilerek daha ince ayarlanmak istersek
+                  ( '01-10-1.000 10-20-1.500 20-40-2.000' ) Bu örnekte
+                  olduğu gibi tırnak içinde daha ayrıntılı verilebilir.
+
+      Şimdi 2 örnek çalışma yapalım:
+
+      Tek görevli:
+      subses -u 01-10-1.000 'sub.srt'
+
+      Çoklu olarak tırnak içinde ( sınırsız ) verilmelidir:
+      '01-10-1.000 10-20-1.500 20-40-2.250 40-60-3.000 60-70-4.000 70-90-5.000'
+
+
+-l    Dil adları ve kod listesi:
+
+-y    Hakkında bilgi ve kullanım örneklerini yazdırır.
+
+-v    Versiyon hakkında bilgi."
+    ;;
+  -z)
+    exec 8>"/tmp/ses/subses-z.lock"
+    if ! flock -n 8; then
+      echo -e "${k_i}${y_K}Zaten çalışan bir SUBSES (-z) işlemi var.${y_X}${r_X}" >&2
+      exit 1
+    fi
+    trap 'rm -rf "/tmp/ses/subx.txt" 2>/dev/null' EXIT
+
+    # Altyazı zaman ayarlarını değiştirme. Gerekli dosya varlıkları kontrol edilir yoksa yad ile istenir.
+    if [[ -n $3 ]]; then
+      g3="$(pwd)/$3"
+      sub=( "$(dirname "$g3")/$(basename "$g3")" "$2" )
+    else
+      read -r sub< <(yad --title="𝕊𝕌𝔹𝕊𝔼𝕊" --height=80 --width=300 \
+        --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+        --text="<span foreground='blue'><b><big><big>Ayarları Secin:</big></big></b></span>" \
+        --form --separator='#' --field="Altyazı Dosya:FL" \
+        --field="<b><big><big>Kaydır sn</big></big></b>" "tr")
+      sub=( "$(cut -d# -f1 <<<"$sub")" "$(cut -d# -f2 <<<"$sub")" )
+    fi
+
+    if [[ ! -f "${sub[0]}" ]]; then
+      echo -e "${k_i}${y_K}Altyazı dosyası bulunamadı: ${sub[0]}${y_X}${r_X}" >&2
+      exit 1
+    fi
+
+    : >'/tmp/ses/subx.txt'
+    echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${sub[0]/*\//}\nSN.: ${sub[1]}"
+
+    # Altyazı zamanlama yapılacak kod döngü blok
+    i=0
+    D=01234567
+    bb="$(grep -c '[0-9][0-9]:[0-9]' "${sub[0]}")"
+    aa=0
+    while read -r oku; do
+      if [[ "$oku" =~ ([0-9][0-9]:) ]]; then
+        if [[ "${sub[1]}" =~ ^- ]]; then
+          read -ra II< <(awk -F':|,|-->' -v x="$(tr -d '-' <<<"${sub[1]}")" '{
+          a = $1*60*60+$2*60+$3"."$4;
+          b = $5*60*60+$6*60+$7"."$8;
+          printf("%.3f ", a-x);
+          printf("%.3f", b-x);
+          }' <<<"$oku")
+        else
+          read -ra II< <(awk -F':|,|-->' -v x="$(tr -d '+' <<<"${sub[1]}")" '{
+          a = $1*60*60+$2*60+$3"."$4;
+          b = $5*60*60+$6*60+$7"."$8;
+          printf("%.3f ", a+x);
+          printf("%.3f", b+x);
+          }' <<<"$oku")
+        fi
+        bas_sn="${II[0]/.*/}"; (( bas_sn < 0 )) && bas_sn=0
+        bit_sn="${II[1]/.*/}"; (( bit_sn < 0 )) && bit_sn=0
+        X="$(printf "%02d:%02d:%02d" "$((bas_sn/3600))" "$((bas_sn%3600/60))" "$((bas_sn%60))")"
+        S="$(printf "%02d:%02d:%02d" "$((bit_sn/3600))" "$((bit_sn%3600/60))" "$((bit_sn%60))")"
+        echo "$X,${II[0]/*./} --> $S,${II[1]/*./}" >>'/tmp/ses/subx.txt'
+        (( aa++ )) || true
+      else
+        echo "$oku" >>'/tmp/ses/subx.txt'
+      fi
+      Y=$(( aa * 100 / bb ))
+      B=$(( Y * 5 / 10 )); K=$(( 50 - B ))
+      T=$(perl -E 'say "┃"x'"$B")
+      E=$(perl -E 'say "╺"x'"$K")
+      # shellcheck disable=SC2027
+      j="\e[1;3"${D:i++%${#D}:1}"m"
+      echo -ne "\r${y_K}$(du -h '/tmp/ses/subx.txt'|cut -f1)${y_X}${j}\
+      ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
+    done <"${sub[0]}"
+
+    if ffmpeg -y -nostdin -loglevel quiet -i '/tmp/ses/subx.txt' "${sub[0]/.*/}_.srt"; then
+      echo -e "\n${m_i}${y_K}İŞLEM TAMAMLANDI...${y_X}${r_X}"
+      rm -rf "/tmp/ses/subx.txt" 2>/dev/null
+    else
+      echo -e "\n${k_i}${y_K}İŞLEM HATASI...! ${y_X}${r_X}"
+    fi
+    ;;
+  *)
+  echo -e "${m_i}${y_K}Geçersiz Seçenek:${y_X}${r_X} ${k_i}${y_K}$1${y_X}${r_X}\n${m_i}${y_K}KULLANIN:${y_X}${r_X}subses\
+  [${k_i}${y_K}-s ${y_X}${r_X}] [${k_i}${y_K}-m ${y_X}${r_X}] [${k_i}${y_K}-c ${y_X}${r_X}]\
+  [${k_i}${y_K}-z ${y_X}${r_X}] [${k_i}${y_K}-v ${y_X}${r_X}] [${k_i}${y_K}-k ${y_X}${r_X}]\
+  [${k_i}${y_K}-u ${y_X}${r_X}] [${k_i}${y_K}-i ${y_X}${r_X}] [${k_i}${y_K}-t ${y_X}${r_X}]\
+  [${k_i}${y_K}-y ${y_X}${r_X}] [${k_i}${y_K}-l ${y_X}${r_X}]" | sed -e 's/\s\{1,\}/ /g'
+  exit 2
+    ;;
+  esac
+fi
