@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: sans-serif;
+      width: 220px;
+      padding: 12px;
+      text-align: center;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      margin-top: 4px;
+    }
+    button.running { background: #d9534f; }   /* Durdur - kirmizi */
+    button.stopped { background: #5cb85c; }   /* Baslat - yesil */
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      text-align: left;
+    }
+    .row label {
+      font-size: 12px;
+      color: #333;
+      white-space: nowrap;
+    }
+    .row input[type="number"] {
+      width: 70px;
+      padding: 4px 6px;
+      font-size: 13px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .checkrow {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin-top: 12px;
+      text-align: left;
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+    }
+    .checkrow input[type="checkbox"] {
+      margin-top: 2px;
+    }
+    .checkrow label {
+      font-size: 11.5px;
+      color: #333;
+      line-height: 1.4;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #555;
+    }
+    #connStatus {
+      margin-top: 4px;
+      font-size: 11px;
+    }
+    #connStatus.ok { color: #2e7d32; }
+    #connStatus.err { color: #c62828; }
+  </style>
+</head>
+<body>
+  <button id="toggleBtn">...</button>
+  <div id="status"></div>
+  <div id="connStatus"></div>
+
+  <div class="row">
+    <label for="portInput">Port:</label>
+    <input type="number" id="portInput" min="1" max="65535" step="1">
+    <button id="saveBtn" style="width:auto; padding:4px 10px; background:#337ab7;">Kaydet</button>
+  </div>
+
+  <div class="checkrow">
+    <input type="checkbox" id="overlapCheckbox">
+    <label for="overlapCheckbox">
+      Yakin altyazilarda oncekini kes<br>
+      (ust uste binmeyi / karismasini engelle)
+    </label>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
