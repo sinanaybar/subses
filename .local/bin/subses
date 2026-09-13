@@ -326,7 +326,7 @@ if [[ "$1" =~ ^- ]]; then
     hedef="$WORKDIR/${SN}.mp3"
     basarili=0
     for deneme in 1 2 3; do
-      wget -q -T 15 -U Mozilla -O "$hedef" \
+      wget -4 -q -T 15 -U Mozilla -O "$hedef" \
         "https://translate.google.com/translate_tts?ie=UTF-8&tl=${VX[1]}&client=tw-ob&q=${YZ,,}" \
         2>/dev/null
       if [[ -s "$hedef" ]]; then basarili=1; break; fi
@@ -1053,11 +1053,11 @@ if [[ "$1" =~ ^- ]]; then
     if [[ "$(</tmp/ses/OCR)" =~ ([A-Za-z]) ]]; then
       case $2 in
       -y | --yaz)
-        notify-send --icon="$HOME/.local/lib/subses-app/subses.png" "$(wget -U "Mozilla/5.0" -q -O- \
+        notify-send --icon="$HOME/.local/lib/subses-app/subses.png" "$(wget -4 -U "Mozilla/5.0" -q -O- \
         "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(</tmp/ses/OCR)"|awk -F'"' '{print $2}'|fmt -sw 100)"
         ;;
       -o | --oku)
-        ses="$(wget -U "Mozilla/5.0" -q -O- \
+        ses="$(wget -4 -U "Mozilla/5.0" -q -O- \
         "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(</tmp/ses/OCR)"|awk -F'"' '{print $2}')"
         mpv --no-terminal --speed="${OCR[2]:-1.0}" --af=rubberband \
         "https://translate.google.com/translate_tts?ie=UTF-8&tl=${OCR[1]}&client=tw-ob&q=${ses,,}"
