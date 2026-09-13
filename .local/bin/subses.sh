@@ -16,6 +16,63 @@ if ! flock -n 200; then
     fi
 fi
 
+if [[ "$XDG_SESSION_TYPE" == "x11" ]]; then
+  PANO_ARAC="xclip"
+else
+  export GDK_BACKEND=wayland
+  PANO_ARAC="wl-paste"
+fi
+
+# Gerekli yardımcı uyg kontrol işlemi.
+gereksinim_kontrol() {
+  local eksik=()
+  local cmd
+
+  # Basit komut adı == görüntü adı olan, oturumdan bağımsız araçlar
+  for cmd in curl wget ffmpeg yad flock perl sox tesseract mpv socat yt-dlp jq pgrep; do
+    command -v "$cmd" >/dev/null 2>&1 || eksik+=("$cmd")
+  done
+
+  command -v "$PANO_ARAC" >/dev/null 2>&1 || eksik+=("$PANO_ARAC")
+
+  # wtype - spectacle sadece wayland altında, ydotool'a ek olarak gerekiyor.
+  if [[ "$XDG_SESSION_TYPE" != "x11" ]]; then
+    command -v wtype >/dev/null 2>&1 || eksik+=("wtype")
+    command -v spectacle >/dev/null 2>&1 || eksik+=("spectacle")
+  else
+    command -v magick >/dev/null 2>&1 || eksik+=("magick")
+    command -v import >/dev/null 2>&1 || eksik+=("import")
+  fi
+
+  command -v subses >/dev/null 2>&1 || eksik+=("subses (PATH içinde bulunamadı)")
+
+  test -f "$HOME/.local/bin/subses" || eksik+=("$HOME/.local/bin/subses")
+  test -f "$HOME/.local/bin/subses.sh" || eksik+=("$HOME/.local/bin/subses.sh")
+  test -f "$HOME/.local/bin/VSub.py" || eksik+=("$HOME/.local/bin/VSub.py")
+  test -f "$HOME/.local/bin/VSub.sh" || eksik+=("$HOME/.local/bin/VSub.sh")
+  test -f "$HOME/.local/bin/youtube-subses" || eksik+=("$HOME/.local/bin/youtube-subses")
+  test -f "$HOME/.local/lib/subses-app/subses.png" || eksik+=("$HOME/.local/lib/subses-app/subses.png")
+  test -f "$HOME/.local/lib/subses-app/dil.log" || eksik+=("$HOME/.local/lib/subses-app/dil.log")
+  test -f "$HOME/.local/lib/subses-app/local_server.py" || eksik+=("$HOME/.local/lib/subses-app/local_server.py")
+  test -f "$HOME/.local/lib/subses-app/subses_core.sh" || eksik+=("$HOME/.local/lib/subses-app/subses_core.sh")
+  test -f "$HOME/.local/lib/subses-app/youtube-subses-ext.sh" || eksik+=("$HOME/.local/lib/subses-app/youtube-subses-ext.sh")
+
+  if (( ${#eksik[@]} > 0 )); then
+    local liste
+    liste="$(printf '  • %s\n' "${eksik[@]}")"
+    echo -e "${k_i}${y_K}Eksik bağımlılık/dosya(lar):${y_X}${r_X}\n${liste}" >&2
+    echo "Kurulum örneği: sudo pacman -S ${eksik[*]}" >&2
+    if command -v yad >/dev/null 2>&1; then
+      yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
+          --window-icon="$HOME/.local/lib/subses-app/subses.png" \
+          --height=220 --width=420 \
+          --text="Eksik bağımlılık / dosya(lar):\n\n${liste}"
+    fi
+    return 1
+  fi
+}
+gereksinim_kontrol || exit 1
+
 SES_DIR="${SES_DIR:-/tmp/ses}"
 SUB_LOG="$SES_DIR/suB.log"
 YAD_LOG="$SES_DIR/YAD.log"
