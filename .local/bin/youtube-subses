@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "$HOME/.local/lib/subses-app/youtube-subses-ext.sh" "$@"
