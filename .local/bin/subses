@@ -35,7 +35,7 @@ r_X="\e[0m"
 SES_DIR="/tmp/ses/X"
 LOCK_FILE="/tmp/ses/subses.lock"
 MAX_PARALLEL=5     # Aynı anda kaç indirme yapılacağı
-CHUNK_LIMIT=190    # Google TTS'e gönderilecek tek parçanın maksimum karakteri
+CHUNK_LIMIT=199    # Google TTS'e gönderilecek tek parçanın maksimum karakteri
 [[ ! -d "/tmp/ses" ]] && mkdir -p "/tmp/ses"
 if [[ "$XDG_SESSION_TYPE" == "x11" ]]; then
   PANO_ARAC="xclip"
@@ -44,55 +44,6 @@ else
   PANO_ARAC="wl-paste"
 fi
 
-# Gerekli yardımcı uyg kontrol işlemi.
-gereksinim_kontrol() {
-  local eksik=()
-  local cmd
-
-  # Basit komut adı == görüntü adı olan, oturumdan bağımsız araçlar
-  for cmd in curl wget ffmpeg yad flock perl sox tesseract mpv socat yt-dlp jq pgrep; do
-    command -v "$cmd" >/dev/null 2>&1 || eksik+=("$cmd")
-  done
-
-  command -v "$PANO_ARAC" >/dev/null 2>&1 || eksik+=("$PANO_ARAC")
-
-  # wtype - spectacle sadece wayland altında, ydotool'a ek olarak gerekiyor.
-  if [[ "$XDG_SESSION_TYPE" != "x11" ]]; then
-    command -v wtype >/dev/null 2>&1 || eksik+=("wtype")
-    command -v spectacle >/dev/null 2>&1 || eksik+=("spectacle")
-  else
-    command -v magick >/dev/null 2>&1 || eksik+=("magick")
-    command -v import >/dev/null 2>&1 || eksik+=("import")
-  fi
-
-  command -v subses >/dev/null 2>&1 || eksik+=("subses (PATH içinde bulunamadı)")
-
-  test -f "$HOME/.local/bin/subses" || eksik+=("$HOME/.local/bin/subses")
-  test -f "$HOME/.local/bin/subses.sh" || eksik+=("$HOME/.local/bin/subses.sh")
-  test -f "$HOME/.local/bin/VSub.py" || eksik+=("$HOME/.local/bin/VSub.py")
-  test -f "$HOME/.local/bin/VSub.sh" || eksik+=("$HOME/.local/bin/VSub.sh")
-  test -f "$HOME/.local/bin/youtube-subses" || eksik+=("$HOME/.local/bin/youtube-subses")
-  test -f "$HOME/.local/lib/subses-app/subses.png" || eksik+=("$HOME/.local/lib/subses-app/subses.png")
-  test -f "$HOME/.local/lib/subses-app/dil.log" || eksik+=("$HOME/.local/lib/subses-app/dil.log")
-  test -f "$HOME/.local/lib/subses-app/local_server.py" || eksik+=("$HOME/.local/lib/subses-app/local_server.py")
-  test -f "$HOME/.local/lib/subses-app/subses_core.sh" || eksik+=("$HOME/.local/lib/subses-app/subses_core.sh")
-  test -f "$HOME/.local/lib/subses-app/youtube-subses-ext.sh" || eksik+=("$HOME/.local/lib/subses-app/youtube-subses-ext.sh")
-
-  if (( ${#eksik[@]} > 0 )); then
-    local liste
-    liste="$(printf '  • %s\n' "${eksik[@]}")"
-    echo -e "${k_i}${y_K}Eksik bağımlılık/dosya(lar):${y_X}${r_X}\n${liste}" >&2
-    echo "Kurulum örneği: sudo pacman -S ${eksik[*]}" >&2
-    if command -v yad >/dev/null 2>&1; then
-      yad --dnd --title="𝕊𝕌𝔹𝕊𝔼𝕊" \
-          --window-icon="$HOME/.local/lib/subses-app/subses.png" \
-          --height=220 --width=420 \
-          --text="Eksik bağımlılık / dosya(lar):\n\n${liste}"
-    fi
-    return 1
-  fi
-}
-gereksinim_kontrol || exit 1
 pano_oku() {
   if [[ "$PANO_ARAC" == "xclip" ]]; then
     xclip -o 2>/dev/null
@@ -122,7 +73,7 @@ ceviri_al() {
   local hedef deneme=0
   hedef="$dizin/$(printf '%05d' "$idx").txt"
   while (( deneme < 3 )); do
-    wget -U "Mozilla/5.0" -q -T 15 --tries=1 -O- \
+    wget -4 -U "Mozilla/5.0" -q -T 15 --tries=1 -O- \
       "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${hedef_dil}&dt=t&q=${metin_parca}" \
       2>/dev/null | awk -F'"' '{print $2}' >"$hedef"
     [[ -s "$hedef" ]] && return 0
@@ -160,6 +111,119 @@ paralel_cevir() {
   rm -rf "$tmp"
 }
 export -f paralel_cevir
+
+k_stream_cevir_ve_oku() {
+  local dil="$1" hiz="$2" metin="$3"
+  local tmp i n next rc
+  local -a parcalar=() pids=()
+
+  mapfile -t parcalar < <(
+    awk -v max="$CHUNK_LIMIT" '
+      {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+        gsub(/[[:space:]]+/, " ")
+        gsub(/"/, "")
+        if (!length($0)) next
+        n = split($0, w, / /)
+        parca = ""
+        for (i = 1; i <= n; i++) {
+          aday = (parca == "" ? w[i] : parca " " w[i])
+          if (length(aday) <= max) {
+            parca = aday
+          } else {
+            if (parca != "") print parca
+            # Tek kelime limitten uzunsa zorunlu olarak kes.
+            while (length(w[i]) > max) {
+              print substr(w[i], 1, max)
+              w[i] = substr(w[i], max + 1)
+            }
+            parca = w[i]
+          }
+        }
+        if (parca != "") print parca
+      }
+    ' <<<"$metin"
+  )
+  n="${#parcalar[@]}"
+  (( n == 0 )) && return 0
+
+  tmp="$(mktemp -d /tmp/ses/k.XXXXXX)" || return 1
+  : >'/tmp/ses/AT'
+
+  k_stream_temizle() {
+    local p
+    for p in "${pids[@]}"; do
+      [[ -n "$p" ]] && kill -TERM "$p" 2>/dev/null
+    done
+    rm -rf "$tmp" 2>/dev/null
+    rm -f '/tmp/ses/AT' 2>/dev/null
+  }
+  trap 'k_stream_temizle' EXIT INT TERM
+
+  # Arka plan alt kabuğu ana cleanup trap'ini devralmasın.
+  k_stream_baslat() {
+    local idx="$1" metin_parca="$2"
+    local donefile="$tmp/$(printf '%05d' "$idx").done"
+    (
+      trap - EXIT INT TERM
+      ceviri_al "$idx" "$metin_parca" "$dil" "$tmp"
+      rc=$?
+      printf '%s\n' "$rc" >"$donefile"
+    ) &
+    pids[$idx]="$!"
+  }
+
+  # İlk pencereyi doldur. En fazla MAX_PARALLEL çeviri aynı anda çalışır.
+  next=1
+  while (( next <= n && next <= MAX_PARALLEL )); do
+    k_stream_baslat "$next" "${parcalar[$((next-1))]}"
+    ((next++))
+  done
+
+  for (( i=1; i<=n; i++ )); do
+    local sonuc="$tmp/$(printf '%05d' "$i").txt"
+    local durum_dosyasi="$tmp/$(printf '%05d' "$i").done"
+
+    # Sıra korunur; sonraki parçaların çevirisi bu sırada arka planda devam eder.
+    while [[ ! -f "$durum_dosyasi" ]]; do
+      [[ ! -e '/tmp/ses/AT' ]] && return 130
+      sleep 0.03
+    done
+
+    rc="$(<"$durum_dosyasi")"
+    if [[ "$rc" == 0 && -s "$sonuc" ]]; then
+      mpv --no-terminal --speed="$hiz" --af=rubberband \
+        "https://translate.google.com/translate_tts?ie=UTF-8&tl=$dil&client=tw-ob&q=$(<"$sonuc")" &
+      local mpv_pid=$!
+      while kill -0 "$mpv_pid" 2>/dev/null; do
+        if [[ ! -e '/tmp/ses/AT' ]]; then
+          kill -TERM "$mpv_pid" 2>/dev/null || true
+          sleep 0.05
+          kill -KILL "$mpv_pid" 2>/dev/null || true
+          wait "$mpv_pid" 2>/dev/null || true
+          return 130
+        fi
+        sleep 0.01
+      done
+      wait "$mpv_pid" 2>/dev/null || true
+    elif [[ "$rc" != 0 ]]; then
+      notify-send -u critical "Çeviri başarısız" "Parça $i alınamadı" \
+        --icon="$HOME/.local/lib/subses-app/subses.png" 2>/dev/null || true
+    fi
+
+    [[ ! -e '/tmp/ses/AT' ]] && return 130
+
+    # Bir çeviri işlendiğinde pencereyi yeniden doldur.
+    if (( next <= n )); then
+      k_stream_baslat "$next" "${parcalar[$((next-1))]}"
+      ((next++))
+    fi
+  done
+
+  trap - EXIT INT TERM
+  k_stream_temizle
+  return 0
+}
 
 # UYG komut ana gövde
 if [[ "$1" =~ ^- ]]; then
@@ -804,18 +868,7 @@ if [[ "$1" =~ ^- ]]; then
 
       metin="${5:-$(pano_oku)}"
       # Satır boyutu sınırlandırılır, temizlenir ve paralel çevrilir.
-      mapfile -t birimler < <(tr '.|?|!|:|;|,' '\n' <<<"$metin" | awk NF | \
-        while read -r oku; do
-          sed -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//' <<<"$oku" | tr -d '"'
-        done)
-      paralel_cevir "$3" "${birimler[@],,}" >'/tmp/ses/AT'
-
-      # çok satırlı olarak işlenir ve mpv kullanılarak seslendirilir. Mpv hız varsayılan hız 1.0'dır.
-      while read -r ou; do
-        mpv --no-terminal --speed="${4:-1.0}" --af=rubberband \
-        "https://translate.google.com/translate_tts?ie=UTF-8&tl=$3&client=tw-ob&q=${ou}"
-        [[ ! -e '/tmp/ses/AT' ]] && break
-      done <'/tmp/ses/AT'
+      k_stream_cevir_ve_oku "$3" "${4:-1.0}" "$metin"
       # İşlem sonu yad kapatma ve dosya silmek.
       kill -9 "$_yad" 2>/dev/null
       rm -f '/tmp/ses/AT' 2>/dev/null
@@ -825,17 +878,7 @@ if [[ "$1" =~ ^- ]]; then
           --command="rm /tmp/ses/AT" & _yad="$!"
 
       metin="${4:-$(pano_oku)}"
-      mapfile -t birimler < <(tr '.|?|!|:|;|,' '\n' <<<"$metin" | awk NF | \
-        while read -r oku; do
-          sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//' <<<"$oku"
-        done)
-      paralel_cevir "$2" "${birimler[@],,}" >'/tmp/ses/AT'
-
-      while read -r ou; do
-        mpv --no-terminal --speed="${3:-1.0}" --af=rubberband \
-        "https://translate.google.com/translate_tts?ie=UTF-8&tl=$2&client=tw-ob&q=${ou}"
-        [[ ! -e '/tmp/ses/AT' ]] && break
-      done <'/tmp/ses/AT'
+      k_stream_cevir_ve_oku "$2" "${3:-1.0}" "$metin"
       kill -9 "$_yad" 2>/dev/null
     fi
     rm -f '/tmp/ses/AT' 2>/dev/null
