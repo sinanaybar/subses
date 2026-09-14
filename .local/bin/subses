@@ -8,9 +8,9 @@
 ## https://github.com/sinanaybar/subses
 ## sinanaybar@yandex.com
 ## https://www.youtube.com/watch?v=MJqDyuQW59E
-## YÜKLÜ OLDUĞUNDAN EMİN OLUN: Yardımcı uygulamarın kurulu değilse kurun.
+## YÜKLÜ OLDUĞUNDAN EMİN OLUN: Yardımcı uygulamaların kurulu değilse kurun.
 ## Wayland.) ffmpeg _ mpv _ yad _ wl-paste _ wtype _ sox _ socat _ jq _ tesseract
-## X11.) ffmpeg _ mpv _ yad _ xclip _ sox _ socat _ tesserac
+## X11.) ffmpeg _ mpv _ yad _ xclip _ sox _ socat _ jq _ tesseract
 
 SUBSES="
 --------------------------------------
@@ -22,7 +22,6 @@ SUBSES="
 "
 
 # --- Ortak ayarlar ---
-# Yazdırma işlemi özelleştirmek için değerler atıyoruz.
 y_K="$(tput bold)"
 y_X="$(tput sgr0)"
 k_i='\e[1;31m'
@@ -35,7 +34,7 @@ r_X="\e[0m"
 SES_DIR="/tmp/ses/X"
 LOCK_FILE="/tmp/ses/subses.lock"
 MAX_PARALLEL=5     # Aynı anda kaç indirme yapılacağı
-CHUNK_LIMIT=199    # Google TTS'e gönderilecek tek parçanın maksimum karakteri
+CHUNK_LIMIT=180    # Google TTS'e gönderilecek tek parçanın maksimum karakteri
 [[ ! -d "/tmp/ses" ]] && mkdir -p "/tmp/ses"
 if [[ "$XDG_SESSION_TYPE" == "x11" ]]; then
   PANO_ARAC="xclip"
@@ -68,22 +67,35 @@ metni_parcala() {
     fi
   done
 }
+
+# --- Google Translate çeviri isteği ---
+# wget + jq @uri ile manuel URL-encode. wget -G/--data-urlencode desteklemeyen
+# sistemlerde de çalışır ve Google bot korumasına curl'den daha az takılır.
 ceviri_al() {
   local idx="$1" metin_parca="$2" hedef_dil="$3" dizin="$4"
   local hedef deneme=0
   hedef="$dizin/$(printf '%05d' "$idx").txt"
+
+  # Metni URL-encode et (jq ile)
+  local q_enc
+  q_enc="$(printf '%s' "$metin_parca" | jq -sRr @uri)"
+
+  local url="https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${hedef_dil}&dt=t&q=${q_enc}"
+
   while (( deneme < 3 )); do
-    wget -4 -U "Mozilla/5.0" -q -T 15 --tries=1 -O- \
-      "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${hedef_dil}&dt=t&q=${metin_parca}" \
-      2>/dev/null | awk -F'"' '{print $2}' >"$hedef"
+    wget -4 -U "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+      -q -T 15 --tries=1 -O- "$url" \
+      2>/dev/null | jq -r '.[0] | map(.[0]) | join("")' >"$hedef" 2>/dev/null
     [[ -s "$hedef" ]] && return 0
     (( deneme++ ))
+    sleep 2
   done
   notify-send -u critical "Çeviri başarısız" "Parça $idx 3 denemede de alınamadı" \
     --icon="$HOME/.local/lib/subses-app/subses.png"
   return 1
 }
 export -f ceviri_al
+
 paralel_cevir() {
   local dil="$1"; shift
   local -a parcalar=("$@")
@@ -117,33 +129,7 @@ k_stream_cevir_ve_oku() {
   local tmp i n next rc
   local -a parcalar=() pids=()
 
-  mapfile -t parcalar < <(
-    awk -v max="$CHUNK_LIMIT" '
-      {
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "")
-        gsub(/[[:space:]]+/, " ")
-        gsub(/"/, "")
-        if (!length($0)) next
-        n = split($0, w, / /)
-        parca = ""
-        for (i = 1; i <= n; i++) {
-          aday = (parca == "" ? w[i] : parca " " w[i])
-          if (length(aday) <= max) {
-            parca = aday
-          } else {
-            if (parca != "") print parca
-            # Tek kelime limitten uzunsa zorunlu olarak kes.
-            while (length(w[i]) > max) {
-              print substr(w[i], 1, max)
-              w[i] = substr(w[i], max + 1)
-            }
-            parca = w[i]
-          }
-        }
-        if (parca != "") print parca
-      }
-    ' <<<"$metin"
-  )
+  mapfile -t parcalar < <( fmt -sw "$CHUNK_LIMIT" <<<"$metin" )
   n="${#parcalar[@]}"
   (( n == 0 )) && return 0
 
@@ -160,7 +146,6 @@ k_stream_cevir_ve_oku() {
   }
   trap 'k_stream_temizle' EXIT INT TERM
 
-  # Arka plan alt kabuğu ana cleanup trap'ini devralmasın.
   k_stream_baslat() {
     local idx="$1" metin_parca="$2"
     local donefile="$tmp/$(printf '%05d' "$idx").done"
@@ -173,7 +158,6 @@ k_stream_cevir_ve_oku() {
     pids[$idx]="$!"
   }
 
-  # İlk pencereyi doldur. En fazla MAX_PARALLEL çeviri aynı anda çalışır.
   next=1
   while (( next <= n && next <= MAX_PARALLEL )); do
     k_stream_baslat "$next" "${parcalar[$((next-1))]}"
@@ -184,28 +168,35 @@ k_stream_cevir_ve_oku() {
     local sonuc="$tmp/$(printf '%05d' "$i").txt"
     local durum_dosyasi="$tmp/$(printf '%05d' "$i").done"
 
-    # Sıra korunur; sonraki parçaların çevirisi bu sırada arka planda devam eder.
     while [[ ! -f "$durum_dosyasi" ]]; do
       [[ ! -e '/tmp/ses/AT' ]] && return 130
-      sleep 0.03
+      sleep 0.01
     done
 
     rc="$(<"$durum_dosyasi")"
     if [[ "$rc" == 0 && -s "$sonuc" ]]; then
-      mpv --no-terminal --speed="$hiz" --af=rubberband \
-        "https://translate.google.com/translate_tts?ie=UTF-8&tl=$dil&client=tw-ob&q=$(<"$sonuc")" &
-      local mpv_pid=$!
-      while kill -0 "$mpv_pid" 2>/dev/null; do
-        if [[ ! -e '/tmp/ses/AT' ]]; then
-          kill -TERM "$mpv_pid" 2>/dev/null || true
-          sleep 0.05
-          kill -KILL "$mpv_pid" 2>/dev/null || true
-          wait "$mpv_pid" 2>/dev/null || true
-          return 130
-        fi
-        sleep 0.01
-      done
-      wait "$mpv_pid" 2>/dev/null || true
+      # wget + jq @uri ile TTS URL'i oluştur (curl engelleniyor)
+      local ses_dosyasi="$tmp/$i.mp3"
+      local q_enc
+      q_enc="$(jq -sRr @uri <<<"$(<"$sonuc")")"
+      if wget -4 -U "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+          -q -T 20 --tries=1 -O "$ses_dosyasi" \
+          "https://translate.google.com/translate_tts?ie=UTF-8&tl=$dil&client=tw-ob&q=${q_enc}" \
+          2>/dev/null && [[ -s "$ses_dosyasi" ]]; then
+        mpv --no-terminal --speed="$hiz" --af=rubberband "$ses_dosyasi" &
+        local mpv_pid=$!
+        while kill -0 "$mpv_pid" 2>/dev/null; do
+          if [[ ! -e '/tmp/ses/AT' ]]; then
+            kill -TERM "$mpv_pid" 2>/dev/null || true
+            sleep 0.05
+            kill -KILL "$mpv_pid" 2>/dev/null || true
+            wait "$mpv_pid" 2>/dev/null || true
+            return 130
+          fi
+          sleep 0.01
+        done
+        wait "$mpv_pid" 2>/dev/null || true
+      fi
     elif [[ "$rc" != 0 ]]; then
       notify-send -u critical "Çeviri başarısız" "Parça $i alınamadı" \
         --icon="$HOME/.local/lib/subses-app/subses.png" 2>/dev/null || true
@@ -213,7 +204,6 @@ k_stream_cevir_ve_oku() {
 
     [[ ! -e '/tmp/ses/AT' ]] && return 130
 
-    # Bir çeviri işlendiğinde pencereyi yeniden doldur.
     if (( next <= n )); then
       k_stream_baslat "$next" "${parcalar[$((next-1))]}"
       ((next++))
@@ -326,8 +316,11 @@ if [[ "$1" =~ ^- ]]; then
     hedef="$WORKDIR/${SN}.mp3"
     basarili=0
     for deneme in 1 2 3; do
+      # wget + jq @uri ile manuel URL-encode (wget -G/--data-urlencode desteklemiyor)
+      local q_enc
+      q_enc="$(jq -sRr @uri <<<"${YZ,,}")"
       wget -4 -q -T 15 -U Mozilla -O "$hedef" \
-        "https://translate.google.com/translate_tts?ie=UTF-8&tl=${VX[1]}&client=tw-ob&q=${YZ,,}" \
+        "https://translate.google.com/translate_tts?ie=UTF-8&tl=${VX[1]}&client=tw-ob&q=${q_enc}" \
         2>/dev/null
       if [[ -s "$hedef" ]]; then basarili=1; break; fi
       sleep 1
@@ -511,7 +504,6 @@ if [[ "$1" =~ ^- ]]; then
       else
         pano="$(xclip -o -selection clipboard 2>/dev/null)"
       fi
-      # $3 zaten verilmişse onu koru, verilmemişse pano içeriğini kullan
       [[ -z "$metin" ]] && metin="$pano"
 
       echo "İşlem başlatılıyor..." >"$SES_DIR/xterm.log"
@@ -540,11 +532,9 @@ if [[ "$1" =~ ^- ]]; then
 
     : >"$SES_DIR/bir.txt"
 
-    # Metni cümlelere ayır (orijinal mantık korunuyor)
     mapfile -t cumleler < <(tr '.|?|!|,|:|;' '\n' <<<"$metin" | awk 'NF' \
       | sed -e 's/\W/ /g' -e 's/\s\{1,\}/ /g' -e 's/^\s\{1,\}//')
 
-    # Google TTS'in ~200 karakter sınırını aşan cümleleri kelime bazlı küçük parçalara böl
     parcala() {
       local cumle="$1" limit="$2"
       local -a kelimeler
@@ -578,26 +568,26 @@ if [[ "$1" =~ ^- ]]; then
 
     echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSES: ${dosya}\nDiL: ${dil}"
 
-    # --- Tek bir parçayı indiren fonksiyon (paralel çalıştırılacak) ---
+    # --- wget + jq @uri ile indirme ---
     indir() {
       local idx="$1" metin_parca="$2" dil="$3" dizin="$4"
       local hedef deneme=0
+      local q_enc
+      q_enc="$(jq -sRr @uri <<<"${metin_parca,,}")"
       hedef="$dizin/$(printf '%05d' "$idx").mp3"
-      until curl -fsSL -A "Mozilla" --connect-timeout 5 --max-time 20 \
-          -G "https://translate.google.com/translate_tts" \
-          --data-urlencode "ie=UTF-8" \
-          --data-urlencode "tl=${dil}" \
-          --data-urlencode "client=tw-ob" \
-          --data-urlencode "q=${metin_parca,,}" \
-          -o "$hedef" 2>/dev/null; do
+      while (( deneme < 3 )); do
+        wget -4 -U "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+          -q -T 20 --tries=1 -O "$hedef" \
+          "https://translate.google.com/translate_tts?ie=UTF-8&tl=${dil}&client=tw-ob&q=${q_enc}" \
+          2>/dev/null
+        [[ -s "$hedef" ]] && return 0
         (( deneme++ ))
-        (( deneme >= 3 )) && return 1
         sleep 1
       done
+      return 1
     }
     export -f indir
 
-    # --- Gerçek zamanlı ilerleme göstergesi (arka planda) ---
     (
       while :; do
         n=$(find "$SES_DIR" -maxdepth 1 -name '*.mp3' -size +0c 2>/dev/null | wc -l)
@@ -631,7 +621,6 @@ if [[ "$1" =~ ^- ]]; then
     kill "$izleyici" 2>/dev/null; wait "$izleyici" 2>/dev/null
     echo
 
-    # --- Sıralı concat listesi oluştur (indirme sırasına değil, gerçek metin sırasına göre) ---
     eksik_dosya=0
     for (( i=1; i<=R; i++ )); do
       f="$SES_DIR/$(printf '%05d' "$i").mp3"
@@ -669,7 +658,6 @@ if [[ "$1" =~ ^- ]]; then
     set -e
     term=""
     ceviri_dizin=""
-    # İptal etme olasılığına karşın artık dosya temizleme.
     TEMiZLE() {
       [[ -n "$term" ]] && { kill "$term" 2>/dev/null || true; }
       [[ -f '/tmp/ses/tail.pid' ]] && { kill -9 "$(</tmp/ses/tail.pid)" 2>/dev/null || true; }
@@ -685,7 +673,6 @@ if [[ "$1" =~ ^- ]]; then
     trap 'hata_yakala "$LINENO" "$BASH_COMMAND"' ERR
     trap TEMiZLE EXIT
 
-    # Altyazı varlığı kontrol ediliyor, yoksa yad kullanılarak kullanıcıdan istenir.
     if [[ "${3/*./}" == "srt" ]]; then
       if (( $(grep -o '#' <<<"$3" | wc -l) > 1 )); then
         echo "Altyazı adından '#' kaldırın."
@@ -717,7 +704,6 @@ if [[ "$1" =~ ^- ]]; then
       yes | ffmpeg -nostdin -loglevel quiet -i "${sub/\#*/}" '/tmp/ses/sub.srt' >/dev/null
       sub=( "/tmp/ses/sub.srt" "$(cut -d# -f2 <<<"${sub[1]}")" )
       : >"${yol}.${sub[1]}.txt"
-      # yad bilgilendirme penceresi gösterimi.
       echo "İŞLEM BAŞLATILIYOR..." >'/tmp/ses/xterm.log'
       ( tail -n0 -f '/tmp/ses/xterm.log' 2>/dev/null & echo $! >'/tmp/ses/tail.pid' ) | \
       yad --text-info --tail \
@@ -732,7 +718,6 @@ if [[ "$1" =~ ^- ]]; then
 
     if [[ -f '/tmp/ses/sub.srt' ]]; then
       bas="$(grep -c '[0-9][0-9]:' "${sub[0]}")" || true
-      # Alınan altyazı dosyası düzenlenir ve işlem için log dosyasına kaydedilir.
       paste -- \
         <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}" | sed '$d') \
         <(grep -now "^[0-9][0-9]:[0-9][0-9]:[0-9][0-9],[0-9][0-9][0-9]" "${sub[0]}" | sed '1d') | \
@@ -750,7 +735,6 @@ if [[ "$1" =~ ^- ]]; then
       echo -ne "\r\n"
       echo -ne "\r${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${dos}\nDiL: ${sub[1]}\n"
 
-      # --- FAZ 1: her blok için başlık + çeviri parçalarını hazırla (ağ isteği YOK) ---
       mapfile -t sub_satirlari <'/tmp/ses/Sub.log'
       toplam_blok="${#sub_satirlari[@]}"
       blok_baslik=()
@@ -836,7 +820,6 @@ if [[ "$1" =~ ^- ]]; then
         B=$(( Y * 5 / 10 )); K=$(( 50 - B ))
         T=$(perl -E 'say "┃"x'"$B")
         E=$(perl -E 'say "╺"x'"$K")
-        # shellcheck disable=SC2027
         j="\e[1;3"${D:i++%${#D}:1}"m"
         echo -ne "\r${y_K}${bak}${y_X}${j}\
         ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y} %${y_X}${r_X}"
@@ -860,16 +843,13 @@ if [[ "$1" =~ ^- ]]; then
     ;;
   -k)
     if [[ "$2" =~ ^- ]]; then
-      # işlem çalıştığını göstermek icon koyulur. Kapatmak için icona tıklamak gerekir.
       yad --notification --listen \
           --image="$HOME/.local/lib/subses-app/subses.png" \
           --command="rm /tmp/ses/AT" & _yad="$!"
       sleep "$(tr -d - <<<"$2")"
 
       metin="${5:-$(pano_oku)}"
-      # Satır boyutu sınırlandırılır, temizlenir ve paralel çevrilir.
       k_stream_cevir_ve_oku "$3" "${4:-1.0}" "$metin"
-      # İşlem sonu yad kapatma ve dosya silmek.
       kill -9 "$_yad" 2>/dev/null
       rm -f '/tmp/ses/AT' 2>/dev/null
     else
@@ -884,7 +864,6 @@ if [[ "$1" =~ ^- ]]; then
     rm -f '/tmp/ses/AT' 2>/dev/null
     ;;
   -t)
-    # 3.cü değer kontrol edilir, mevcut ise alınır yoksa panodan aktarılır.
     if [[ "$3" == "X" ]]; then
       mapfile -t birimler < <(metni_parcala "$(pano_oku)")
       _DEPO="$(paralel_cevir "${2:-tr}" "${birimler[@]}")"
@@ -895,11 +874,9 @@ if [[ "$1" =~ ^- ]]; then
       fi
 
     elif [[ -z "$3" ]]; then
-      # Borulama ile alınan metinler
       mapfile -t birimler < <(metni_parcala "$(cat)")
       paralel_cevir "${2:-tr}" "${birimler[@]}"
     elif [[ -n "$3" ]]; then
-      # Direk girilen metinler.
       mapfile -t birimler < <(metni_parcala "$3")
       paralel_cevir "${2:-tr}" "${birimler[@]}"
     fi
@@ -1000,7 +977,6 @@ if [[ "$1" =~ ^- ]]; then
     done <'/tmp/ses/srt.sub' 2>/dev/null
     echo
 
-    # Verilen kurallara uyan zaman birimlerin sayısı
     for i in /tmp/ses/u/* ; do
      echo -e "\n${i##*/}\t ➜  $(awk '{s+=$1}END{print s}' "$i")"
     done|awk NF
@@ -1020,13 +996,11 @@ if [[ "$1" =~ ^- ]]; then
     fi
     rm -f '/tmp/ses/OCR' '/tmp/ses/OCR.png' '/tmp/ses/X.log' 2>/dev/null
 
-    # OCR ile yazıyı metne dökmek için tesseract kullanılmıştır.
     read -ra OCR< <(yad --window-icon="$HOME/.local/lib/subses-app/subses.png" \
         --title="⟆υᑲ⟆∈⟆" --completion \
         --entry="Name:" ""  $(tesseract --list-langs|awk '{printf "\" %s \" ",$0}')|\
         while read line; do EX=`echo $line|awk -F',' '{print $1}'`; echo "$EX"; done; sleep 0.1)
     sleep 0.5
-    # Ekran görüntüsü alınarak tesseract ile işlem yapılır. Resim boyutu x2 ve negatif ayarlanır.
     if [[ "$XDG_SESSION_TYPE" == "x11" ]]; then
       ( import png:-; sleep 0.1; ) >'/tmp/ses/OCR.png'
     else
@@ -1053,14 +1027,30 @@ if [[ "$1" =~ ^- ]]; then
     if [[ "$(</tmp/ses/OCR)" =~ ([A-Za-z]) ]]; then
       case $2 in
       -y | --yaz)
+        # wget + jq @uri
+        local ocr_q
+        ocr_q="$(jq -sRr @uri < /tmp/ses/OCR)"
         notify-send --icon="$HOME/.local/lib/subses-app/subses.png" "$(wget -4 -U "Mozilla/5.0" -q -O- \
-        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(</tmp/ses/OCR)"|awk -F'"' '{print $2}'|fmt -sw 100)"
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=${ocr_q}" \
+        | jq -r '.[0] | map(.[0]) | join("")' | fmt -sw 100)"
         ;;
       -o | --oku)
+        # wget + jq @uri
+        local ocr_q
+        ocr_q="$(jq -sRr @uri < /tmp/ses/OCR)"
         ses="$(wget -4 -U "Mozilla/5.0" -q -O- \
-        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=$(</tmp/ses/OCR)"|awk -F'"' '{print $2}')"
-        mpv --no-terminal --speed="${OCR[2]:-1.0}" --af=rubberband \
-        "https://translate.google.com/translate_tts?ie=UTF-8&tl=${OCR[1]}&client=tw-ob&q=${ses,,}"
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${OCR[1]}&dt=t&q=${ocr_q}" \
+        | jq -r '.[0] | map(.[0]) | join("")')"
+
+        local tts_q
+        tts_q="$(jq -sRr @uri <<<"${ses,,}")"
+        ses_dosya="/tmp/ses/OCR_tts.mp3"
+        if wget -4 -U "Mozilla/5.0" -q -T 20 --tries=1 -O "$ses_dosya" \
+            "https://translate.google.com/translate_tts?ie=UTF-8&tl=${OCR[1]}&client=tw-ob&q=${tts_q}" \
+            2>/dev/null && [[ -s "$ses_dosya" ]]; then
+          mpv --no-terminal --speed="${OCR[2]:-1.0}" --af=rubberband "$ses_dosya"
+          rm -f "$ses_dosya" 2>/dev/null
+        fi
         ;;
       esac
     fi
@@ -1206,7 +1196,7 @@ PAREMETRELER VE ÖRNEK KULLANIM:
       subses -m tr
 
       Terminal üzerinden çalışmak için örnek:
-      subses -m tr 'selam sinan' '/home/$USER/Müzik/ses.mp3'
+      subses -m tr 'selam sinan' '/home/\$USER/Müzik/ses.mp3'
 
 
 -z    Altyazı zamanlamasını yeniden yapılandırma işlemi.
@@ -1322,7 +1312,6 @@ PAREMETRELER VE ÖRNEK KULLANIM:
     fi
     trap 'rm -rf "/tmp/ses/subx.txt" 2>/dev/null' EXIT
 
-    # Altyazı zaman ayarlarını değiştirme. Gerekli dosya varlıkları kontrol edilir yoksa yad ile istenir.
     if [[ -n $3 ]]; then
       g3="$(pwd)/$3"
       sub=( "$(dirname "$g3")/$(basename "$g3")" "$2" )
@@ -1343,7 +1332,6 @@ PAREMETRELER VE ÖRNEK KULLANIM:
     : >'/tmp/ses/subx.txt'
     echo -e "${m_r}${y_K}༺  ${y_X}${r_X} ${m_i}${y_K}⟆υᑲ⟆∈⟆${r_X}${y_X} ${m_r}${y_K}༻ ${r_X}${y_X}\nSUB: ${sub[0]/*\//}\nSN.: ${sub[1]}"
 
-    # Altyazı zamanlama yapılacak kod döngü blok
     i=0
     D=01234567
     bb="$(grep -c '[0-9][0-9]:[0-9]' "${sub[0]}")"
@@ -1378,7 +1366,6 @@ PAREMETRELER VE ÖRNEK KULLANIM:
       B=$(( Y * 5 / 10 )); K=$(( 50 - B ))
       T=$(perl -E 'say "┃"x'"$B")
       E=$(perl -E 'say "╺"x'"$K")
-      # shellcheck disable=SC2027
       j="\e[1;3"${D:i++%${#D}:1}"m"
       echo -ne "\r${y_K}$(du -h '/tmp/ses/subx.txt'|cut -f1)${y_X}${j}\
       ╏${r_X}${k_i}${T}${r_X}${m_r}${y_K}${E}${y_X}${r_X}${j}╏${r_X}\e[21;34m${y_K} ${Y}%${y_X}${r_X}"
